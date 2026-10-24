@@ -1,0 +1,6 @@
+.env
+data/
+*.dump
+*.joblib
+__pycache__/
+.DS_Store
