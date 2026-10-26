@@ -1,90 +1,376 @@
+
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QMessageBox, QSplitter
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QFrame,
+    QTableWidget, QTableWidgetItem, QPushButton, QHeaderView,
+    QMessageBox, QSplitter, QScrollArea
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QBrush
+from PySide6.QtGui import QColor, QBrush, QCursor
 from app.db import Veritabani, hata_coz
 
 
-def bilgi_karti(baslik: str, deger: str) -> QFrame:
+def ort_harf_rozeti(deger) -> str:
+    try:
+        v = float(deger)
+    except (TypeError, ValueError):
+        return "-"
+    if v >= 3.50: return "A+"
+    if v >= 3.00: return "A"
+    if v >= 2.50: return "B"
+    if v >= 2.00: return "C"
+    if v >= 1.00: return "D"
+    return "F"
+
+
+from PySide6.QtGui import QPainter, QPen
+
+def ort_harf_rozeti(deger) -> str:
+    try:
+        v = float(deger)
+    except (TypeError, ValueError):
+        return "-"
+    if v >= 3.50: return "A+"
+    if v >= 3.00: return "A"
+    if v >= 2.50: return "B"
+    if v >= 2.00: return "C"
+    if v >= 1.00: return "D"
+    return "F"
+
+class DonemTimelineWidget(QWidget):
+    def __init__(self, donemler):
+        super().__init__()
+        self.donemler = donemler[:6]
+        self.setFixedHeight(78)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, n = self.width(), 6
+        adim = w / n
+        xs = [int(adim * i + adim / 2) for i in range(n)]
+        y_cizgi = 20
+        aktif_sayisi = len(self.donemler)
+
+        # Arka plan kesintisiz gri cizgi (bastan sona)
+        p.setPen(QPen(QColor("#e2e8f0"), 2))
+        p.drawLine(24, y_cizgi, w - 24, y_cizgi)
+
+        # Aktif donemler arasi kesintisiz yesil cizgi
+        if aktif_sayisi > 0:
+            son_x = xs[min(aktif_sayisi - 1, n - 1)]
+            p.setPen(QPen(QColor("#4ade80"), 2))
+            p.drawLine(24, y_cizgi, son_x, y_cizgi)
+
+        tur_ad = {"guz": "Güz Dönemi", "bahar": "Bahar Dönemi", "yaz": "Yaz Dönemi"}
+        font = self.font()
+
+        for i, x in enumerate(xs):
+            p.setPen(Qt.NoPen)
+            if i < aktif_sayisi:
+                # Ilk nokta biraz daha buyuk ve koyu yesil, diger aktifler canli yesil
+                if i == 0:
+                    p.setBrush(QColor("#22c55e"))
+                    p.drawEllipse(x - 7, y_cizgi - 7, 14, 14)
+                else:
+                    p.setBrush(QColor("#4ade80"))
+                    p.drawEllipse(x - 5, y_cizgi - 5, 10, 10)
+
+                d = self.donemler[i]
+                yil_str = f"{d['yil']}-{int(d['yil'])+1}"
+                tur_str = tur_ad.get(d["tur"], str(d["tur"]))
+
+                p.setPen(QColor("#475569"))
+                font.setPointSize(10)
+                font.setBold(False)
+                p.setFont(font)
+                p.drawText(int(x - adim/2), y_cizgi + 14, int(adim), 18, Qt.AlignCenter, yil_str)
+
+                p.setPen(QColor("#334155"))
+                font.setPointSize(10)
+                p.setFont(font)
+                p.drawText(int(x - adim/2), y_cizgi + 30, int(adim), 18, Qt.AlignCenter, tur_str)
+            else:
+                # Gelecek donemler icin sade gri noktalar (altinda yazi yok)
+                p.setBrush(QColor("#e2e8f0"))
+                p.drawEllipse(x - 5, y_cizgi - 5, 10, 10)
+
+
+def bilgi_karti(baslik: str, deger: str, ikon: str = "A+", renk: str = "#1d70db") -> QFrame:
     kart = QFrame()
-    kart.setObjectName("Kart")
-    lay = QVBoxLayout(kart)
-    lay.setContentsMargins(14, 10, 14, 10)
-    lbl_b = QLabel(baslik.upper())
-    lbl_b.setObjectName("KartBaslik")
+    kart.setObjectName("MetrikKutu")
+    lay = QHBoxLayout(kart)
+    lay.setContentsMargins(14, 12, 14, 12)
+    lay.setSpacing(14)
+
+    lbl_ikon = QLabel(ikon)
+    lbl_ikon.setFixedSize(44, 44)
+    lbl_ikon.setAlignment(Qt.AlignCenter)
+    lbl_ikon.setStyleSheet(
+        f"color: {renk}; background-color: #f0f7ff; border: 1px solid #bfdbfe; "
+        f"border-radius: 6px; font-size: 16px; font-weight: 800;"
+    )
+    lay.addWidget(lbl_ikon)
+
+    v = QVBoxLayout()
+    v.setSpacing(2)
+    lbl_b = QLabel(baslik)
+    lbl_b.setStyleSheet("color: #64748b; font-size: 11px; font-weight: 500;")
     lbl_d = QLabel(deger)
-    lbl_d.setObjectName("KartDeger")
-    lay.addWidget(lbl_b)
-    lay.addWidget(lbl_d)
+    lbl_d.setStyleSheet("color: #0f172a; font-size: 18px; font-weight: 700;")
+    v.addWidget(lbl_b)
+    v.addWidget(lbl_d)
+    lay.addLayout(v, 1)
     return kart
 
 
+class TiklanabilirHizmetKarti(QFrame):
+    def __init__(self, ikon: str, renk: str, baslik: str, aciklama: str, callback):
+        super().__init__()
+        self.setObjectName("HizmetKart")
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.callback = callback
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(16, 14, 16, 14)
+        lay.setSpacing(14)
+
+        lbl_i = QLabel(ikon)
+        lbl_i.setFixedSize(46, 46)
+        lbl_i.setAlignment(Qt.AlignCenter)
+        lbl_i.setStyleSheet(
+            f"color: {renk}; font-size: 22px; font-weight: 800; "
+            f"border: 2px solid {renk}; border-radius: 8px; background-color: #ffffff;"
+        )
+        lay.addWidget(lbl_i, 0, Qt.AlignTop)
+
+        v = QVBoxLayout()
+        v.setSpacing(4)
+        lbl_b = QLabel(baslik)
+        lbl_b.setStyleSheet(f"color: {renk}; font-size: 13px; font-weight: 700;")
+        lbl_a = QLabel(aciklama)
+        lbl_a.setWordWrap(True)
+        lbl_a.setStyleSheet("color: #475569; font-size: 11px; line-height: 1.3;")
+        v.addWidget(lbl_b)
+        v.addWidget(lbl_a)
+        lay.addLayout(v, 1)
+
+    def mousePressEvent(self, event):
+        if self.callback:
+            self.callback()
+        super().mousePressEvent(event)
+
+
 class OgrenciAnaSayfa(QWidget):
-    def __init__(self, db: Veritabani):
+    def __init__(self, db: Veritabani, sekme_gecis_cb=None):
         super().__init__()
         self.db = db
-        self.lay = QVBoxLayout(self)
-        self.lay.setContentsMargins(20, 20, 20, 20)
+        self.sekme_gecis_cb = sekme_gecis_cb
+
+        ana_lay = QVBoxLayout(self)
+        ana_lay.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background: transparent;")
+
+        self.icerik_w = QWidget()
+        self.lay = QVBoxLayout(self.icerik_w)
+        self.lay.setContentsMargins(20, 18, 20, 22)
         self.lay.setSpacing(16)
+
+        scroll.setWidget(self.icerik_w)
+        ana_lay.addWidget(scroll)
         self.yenile()
+
+    def _sekme_ac(self, idx: int):
+        if self.sekme_gecis_cb:
+            self.sekme_gecis_cb(idx)
 
     def yenile(self):
         while self.lay.count():
             item = self.lay.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-            elif item.layout():
-                while item.layout().count():
-                    sub = item.layout().takeAt(0)
-                    if sub.widget():
-                        sub.widget().deleteLater()
-
-        baslik = QLabel("Öğrenci Akademik Özeti")
-        baslik.setObjectName("SayfaBaslik")
-        self.lay.addWidget(baslik)
 
         ozet = self.db.tek_satir("SELECT * FROM v_ana_sayfa") or {}
         mez = self.db.tek_satir("SELECT * FROM fn_mezuniyet_ozet_ben()") or {}
-        limit_row = self.db.tek_satir("SELECT fn_akts_limit(fn_oturum_kisi_id()) AS lim") or {}
 
-        kart_lay = QHBoxLayout()
-        kart_lay.setSpacing(12)
-        kart_lay.addWidget(bilgi_karti("Aktif Dönem", str(ozet.get("aktif_donem") or "-")))
-        kart_lay.addWidget(bilgi_karti("Sınıf", f"{ozet.get('sinif', '-')}. Sınıf"))
-        kart_lay.addWidget(bilgi_karti("GNO / DNO", f"{ozet.get('gno') or '-'} / {ozet.get('dno') or '-'}"))
-        kart_lay.addWidget(bilgi_karti("Geçilen AKTS", f"{ozet.get('gecilen_akts', 0)} / {mez.get('gereken_akts', 30)}"))
-        kart_lay.addWidget(bilgi_karti("Dönem AKTS Limiti", f"{limit_row.get('lim', 30)} AKTS"))
-        self.lay.addLayout(kart_lay)
+        profil = self.db.tek_satir(
+            """SELECT o.ogrenci_no, o.giris_yili, k.ad || ' ' || k.soyad AS ad_soyad,
+                      k.eposta, p.ad AS program_ad
+                 FROM ogrenci o
+                 JOIN kisi k ON k.kisi_id = o.kisi_id
+                 LEFT JOIN mufredat m ON m.mufredat_id = o.mufredat_id
+                 LEFT JOIN program p ON p.program_id = m.program_id
+                WHERE o.kisi_id = fn_oturum_kisi_id()"""
+        ) or {}
 
-        durum_kart = QFrame()
-        durum_kart.setObjectName("Kart")
-        d_lay = QVBoxLayout(durum_kart)
-        kayit_acik = "Açık" if ozet.get("kayit_acik") else "Kapalı"
-        mez_uygun = "Uygun ✓" if mez.get("mezuniyet_uygun") else f"Eksik Var ({mez.get('eksikler') or '-'})"
-        d_lay.addWidget(QLabel(f"<b>Kayıt Penceresi:</b> {kayit_acik} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Mezuniyet Durumu:</b> {mez_uygun}"))
-        self.lay.addWidget(durum_kart)
+        danisman = self.db.tek_satir(
+            """SELECT k.ad || ' ' || k.soyad AS ad_soyad, k.eposta
+                 FROM danismanlik d
+                 JOIN kisi k ON k.kisi_id = d.danisman_id
+                WHERE d.ogrenci_id = fn_oturum_kisi_id()
+                  AND d.gecerlilik @> current_date
+                LIMIT 1"""
+        ) or {}
+        danisman_ad = danisman.get("ad_soyad") or "Atanmamış"
 
-        lbl_k = QLabel("Bu Dönemki Kayıtlarım ve Transkript Özeti")
-        lbl_k.setObjectName("SayfaBaslik")
-        self.lay.addWidget(lbl_k)
+        ust_w = QWidget()
+        ust_lay = QHBoxLayout(ust_w)
+        ust_lay.setContentsMargins(0, 0, 0, 0)
+        ust_lay.setSpacing(16)
 
-        tablo = QTableWidget(0, 6)
-        tablo.setHorizontalHeaderLabels(["Ders Kodu", "Ders Adı", "AKTS", "Şube", "Durum", "Danışman Gerekçesi"])
-        tablo.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        tablo.setEditTriggers(QTableWidget.NoEditTriggers)
+        sol_kart = QFrame()
+        sol_kart.setObjectName("PortalKart")
+        s_lay = QVBoxLayout(sol_kart)
+        s_lay.setContentsMargins(18, 16, 18, 16)
+        s_lay.setSpacing(12)
 
-        for r in self.db.sorgula("SELECT * FROM v_kayitlarim ORDER BY kayit_id DESC"):
-            row = tablo.rowCount()
-            tablo.insertRow(row)
-            tablo.setItem(row, 0, QTableWidgetItem(str(r["ders_kod"])))
-            tablo.setItem(row, 1, QTableWidgetItem(str(r["ders_ad"])))
-            tablo.setItem(row, 2, QTableWidgetItem(str(r["akts"])))
-            tablo.setItem(row, 3, QTableWidgetItem(str(r["sube_no"])))
-            tablo.setItem(row, 4, QTableWidgetItem(str(r["durum"])))
-            tablo.setItem(row, 5, QTableWidgetItem(str(r.get("onay_gerekce") or "-")))
-        self.lay.addWidget(tablo)
+        bas_harfler = "".join([p[0] for p in (profil.get("ad_soyad") or "Ö B").split()[:2]]).upper()
+        lbl_avatar = QLabel(bas_harfler)
+        lbl_avatar.setFixedSize(76, 76)
+        lbl_avatar.setAlignment(Qt.AlignCenter)
+        lbl_avatar.setStyleSheet(
+            "background-color: #093567; color: #ffffff; font-size: 24px; "
+            "font-weight: 800; border-radius: 38px; border: 3px solid #dbeafe;"
+        )
+        s_lay.addWidget(lbl_avatar, 0, Qt.AlignHCenter)
+
+        bilgi_satirlari = [
+            ("Ad Soyad", profil.get("ad_soyad") or self.db.ad_soyad),
+            ("Öğrenci Numarası", str(profil.get("ogrenci_no") or "-")),
+            ("Bölüm / Program", str(profil.get("program_ad") or "Bilgisayar Mühendisliği")),
+            ("E-Posta", str(profil.get("eposta") or "-")),
+            ("Akademik Danışman", danisman_ad),
+        ]
+        grid_p = QGridLayout()
+        grid_p.setSpacing(0)
+        for idx, (etiket, deger) in enumerate(bilgi_satirlari):
+            bg = "#f4f7fb" if idx % 2 == 0 else "#ffffff"
+            l_k = QLabel(etiket)
+            l_k.setStyleSheet(
+                f"background-color: {bg}; color: #3b6998; font-weight: 600; "
+                "padding: 7px 10px; border: 1px solid #e5e9f0; border-right: none;"
+            )
+            l_v = QLabel(deger)
+            l_v.setStyleSheet(
+                f"background-color: {bg}; color: #1e293b; font-weight: 600; "
+                "padding: 7px 10px; border: 1px solid #e5e9f0;"
+            )
+            grid_p.addWidget(l_k, idx, 0)
+            grid_p.addWidget(l_v, idx, 1)
+        s_lay.addLayout(grid_p)
+        ust_lay.addWidget(sol_kart, 5)
+
+        sag_kart = QFrame()
+        sag_kart.setObjectName("PortalKart")
+        r_lay = QVBoxLayout(sag_kart)
+        r_lay.setContentsMargins(18, 16, 18, 16)
+        r_lay.setSpacing(14)
+
+        m_grid = QGridLayout()
+        m_grid.setSpacing(12)
+        m_grid.addWidget(
+            bilgi_karti("Sınıf Bilgisi", f"{ozet.get('sinif', 1)}. Sınıf", "👨‍🏫", "#1d70db"), 0, 0
+        )
+        m_grid.addWidget(
+            bilgi_karti("Verilen Kredi (AKTS)", f"{ozet.get('gecilen_akts', 0)} / {mez.get('gereken_akts', 30)}", "±÷", "#1d70db"), 0, 1
+        )
+        m_grid.addWidget(
+            bilgi_karti("Dönem Not Ortalaması", str(ozet.get("dno") or "-"), ort_harf_rozeti(ozet.get("dno")), "#1d70db"), 1, 0
+        )
+        m_grid.addWidget(
+            bilgi_karti("Genel Not Ortalaması", str(ozet.get("gno") or "-"), ort_harf_rozeti(ozet.get("gno")), "#1d70db"), 1, 1
+        )
+        r_lay.addLayout(m_grid)
+
+        donemler = self.db.sorgula(
+            "SELECT yil, tur FROM donem WHERE yil >= (SELECT giris_yili FROM ogrenci WHERE kisi_id = fn_oturum_kisi_id()) ORDER BY yil, CASE tur WHEN 'guz' THEN 1 WHEN 'bahar' THEN 2 ELSE 3 END"
+        )
+        r_lay.addWidget(DonemTimelineWidget(donemler))
+        ust_lay.addWidget(sag_kart, 7)
+        self.lay.addWidget(ust_w)
+
+        hizmet_panel = QFrame()
+        hizmet_panel.setObjectName("PortalKart")
+        hp_lay = QVBoxLayout(hizmet_panel)
+        hp_lay.setContentsMargins(20, 16, 20, 18)
+        hp_lay.setSpacing(14)
+
+        lbl_h_baslik = QLabel("Öğrenci Bilgi Sistemi Hizmetleri")
+        lbl_h_baslik.setObjectName("BolumBaslik")
+        lbl_h_baslik.setAlignment(Qt.AlignCenter)
+        hp_lay.addWidget(lbl_h_baslik)
+
+        h_grid = QGridLayout()
+        h_grid.setSpacing(12)
+
+        hizmetler = [
+            ("👤", "#093567", "Kişisel Bilgiler",
+             "Kişisel kimlik, bölüm, e-posta ve danışman iletişim bilgilerinizi görüntüleyebilirsiniz.",
+             lambda: self._sekme_ac(4)),
+            ("📝", "#22c55e", "Ders Kayıt İşlemleri",
+             "Akademik durum, derse kaydolma, sepete ekleme/çıkarma ve kesinleştirme işlemlerini yapabilirsiniz.",
+             lambda: self._sekme_ac(1)),
+            ("📅", "#f59e0b", "Takvim & Haftalık Program",
+             "Haftalık 5×8 ders programı ızgarası, ders saatleri ve kayıt penceresi takvimine ulaşabilirsiniz.",
+             lambda: self._sekme_ac(4)),
+            ("A+", "#1d70db", "Not Bilgileri & Transkript",
+             "Döneme göre sınav bileşeni notlarınıza, resmi transkripte ve SHA-256 belge doğrulamaya ulaşabilirsiniz.",
+             lambda: self._sekme_ac(2)),
+            ("🎓", "#ef4444", "Mezuniyetime Ne Kaldı?",
+             "Zorunlu/seçmeli grup denetimi, What-If müfredat simülasyonu ve DAG kritik yol ders planını inceleyin.",
+             lambda: self._sekme_ac(3)),
+            ("💬", "#a855f7", "Danışman Bilgileri",
+             f"Aktif Danışmanınız: {danisman_ad}. Danışman onay durumlarınıza ve iletişim bilgilerine ulaşabilirsiniz.",
+             lambda: self._sekme_ac(4)),
+        ]
+
+        for idx, (ikon, renk, baslik, aciklama, cb) in enumerate(hizmetler):
+            kart = TiklanabilirHizmetKarti(ikon, renk, baslik, aciklama, cb)
+            h_grid.addWidget(kart, idx // 3, idx % 3)
+
+        hp_lay.addLayout(h_grid)
+        self.lay.addWidget(hizmet_panel)
+
+        hizli_panel = QFrame()
+        hizli_panel.setObjectName("PortalKart")
+        hz_lay = QVBoxLayout(hizli_panel)
+        hz_lay.setContentsMargins(20, 16, 20, 18)
+        hz_lay.setSpacing(10)
+
+        lbl_hz = QLabel("Hızlı İşlemler")
+        lbl_hz.setObjectName("BolumBaslik")
+        lbl_hz.setAlignment(Qt.AlignCenter)
+        hz_lay.addWidget(lbl_hz)
+
+        kayit_durum_acik = "Açık ✓" if ozet.get("kayit_acik") else "Kapalı"
+        lbl_hz_alt = QLabel(f"Hızlı işlem butonları aktif dönem ({ozet.get('aktif_donem') or '-'}) takvimine göre çalışmaktadır. Kayıt Penceresi: {kayit_durum_acik}")
+        lbl_hz_alt.setAlignment(Qt.AlignCenter)
+        lbl_hz_alt.setStyleSheet("color: #64748b; font-size: 11px;")
+        hz_lay.addWidget(lbl_hz_alt)
+
+        hz_grid = QGridLayout()
+        hz_grid.setSpacing(12)
+
+        hizli_butonlar = [
+            ("⇅   Ders Ekle / Çıkar", lambda: self._sekme_ac(1)),
+            ("📚   Akademik Durum & Transkript", lambda: self._sekme_ac(2)),
+            ("🕒   Kayıtlı Dersler & Program", lambda: self._sekme_ac(1)),
+            ("A+   Dönem Sonu Notları", lambda: self._sekme_ac(2)),
+            ("🎓   Mezuniyetime Ne Kaldı?", lambda: self._sekme_ac(3)),
+            ("👤   Kişisel & Danışman Bilgileri", lambda: self._sekme_ac(4)),
+        ]
+        for idx, (metin, cb) in enumerate(hizli_butonlar):
+            btn = QPushButton(metin)
+            btn.setObjectName("HizliIslemBtn")
+            btn.setCursor(QCursor(Qt.PointingHandCursor))
+            btn.clicked.connect(cb)
+            hz_grid.addWidget(btn, idx // 3, idx % 3)
+
+        hz_lay.addLayout(hz_grid)
+        self.lay.addWidget(hizli_panel)
 
 
 class OgrenciDersSecimi(QWidget):
@@ -105,13 +391,13 @@ class OgrenciDersSecimi(QWidget):
         self.lay.setSpacing(10)
 
         ust = QHBoxLayout()
-        baslik = QLabel("Ders Seçimi, Sepet ve Haftalık Program")
+        baslik = QLabel("Ders Kayıt İşlemleri, Sepet ve Haftalık Program")
         baslik.setObjectName("SayfaBaslik")
         ust.addWidget(baslik)
         ust.addStretch()
 
         self.lbl_akts = QLabel()
-        self.lbl_akts.setStyleSheet("font-weight: 700; color: #1e3a8a; font-size: 13px;")
+        self.lbl_akts.setStyleSheet("font-weight: 700; color: #093567; font-size: 12px;")
         ust.addWidget(self.lbl_akts)
 
         btn_kesin = QPushButton("Sepeti Kesinleştir (Danışman Onayına Gönder)")
@@ -127,7 +413,6 @@ class OgrenciDersSecimi(QWidget):
 
         splitter = QSplitter(Qt.Vertical)
 
-        # 1. Açık Şubeler Tablosu
         ust_w = QWidget()
         u_lay = QVBoxLayout(ust_w)
         u_lay.setContentsMargins(0, 0, 0, 0)
@@ -141,7 +426,6 @@ class OgrenciDersSecimi(QWidget):
         u_lay.addWidget(self.tbl_subeler)
         splitter.addWidget(ust_w)
 
-        # 2. Alt Bölüm: Sepetim/Kayıtlarım + Haftalık Program Izgarası
         alt_w = QWidget()
         a_lay = QHBoxLayout(alt_w)
         a_lay.setContentsMargins(0, 0, 0, 0)
@@ -174,7 +458,6 @@ class OgrenciDersSecimi(QWidget):
         aktif_donem = (self.db.tek_satir("SELECT fn_aktif_donem_id() AS id") or {}).get("id")
         lim = (self.db.tek_satir("SELECT fn_akts_limit(fn_oturum_kisi_id()) AS lim") or {}).get("lim", 30)
 
-        # Açık şubeler
         subeler = self.db.sorgula(
             "SELECT * FROM v_acik_subeler WHERE donem_id = %s ORDER BY ders_kod, sube_no", (aktif_donem,)
         )
@@ -204,7 +487,6 @@ class OgrenciDersSecimi(QWidget):
             btn.clicked.connect(lambda _, sid=sube_id: self.sepete_ekle(sid))
             self.tbl_subeler.setCellWidget(r, 7, btn)
 
-        # Kayıtlarım (aktif dönem)
         kayitlar = self.db.sorgula(
             "SELECT * FROM v_kayitlarim WHERE donem_id = %s ORDER BY kayit_id", (aktif_donem,)
         )
@@ -237,7 +519,6 @@ class OgrenciDersSecimi(QWidget):
 
         self.lbl_akts.setText(f"Seçilen / Aktif AKTS: {secili_akts} / {lim}")
 
-        # Haftalık program ızgarası
         self.tbl_prog.clearContents()
         prog = self.db.sorgula("SELECT * FROM v_haftalik_program WHERE donem_id = %s", (aktif_donem,))
         for p in prog:

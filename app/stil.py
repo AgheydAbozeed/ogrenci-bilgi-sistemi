@@ -1,64 +1,86 @@
 OBS_STIL = """
 QMainWindow, QDialog {
-    background-color: #f4f6f9;
+    background-color: #f3f5f8;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     font-size: 12px;
     color: #1e293b;
 }
 #UstCubuk {
-    background-color: #0b2239;
-    color: #ffffff;
-    border-bottom: 2px solid #c5a059;
-}
-#UstCubuk QLabel {
-    color: #ffffff;
-    font-weight: 600;
+    background-color: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
 }
 #SolMenu {
-    background-color: #102a43;
-    border-right: 1px solid #0b2239;
+    background-color: #093567;
+    border: none;
+}
+#SolMenuProfil {
+    background-color: #072a52;
+    border-bottom: 1px solid #15457d;
 }
 #SolMenu QPushButton {
     text-align: left;
-    padding: 9px 12px;
+    padding: 12px 16px;
     border: none;
-    color: #d9e2ec;
+    color: #e2e8f0;
     font-size: 12px;
     font-weight: 500;
     background-color: transparent;
 }
 #SolMenu QPushButton:hover {
-    background-color: #1e3a5f;
+    background-color: #114682;
     color: #ffffff;
 }
 #SolMenu QPushButton[secili="true"] {
-    background-color: #1d4ed8;
-    color: #ffffff;
+    background-color: #f3f5f8;
+    color: #0d5bd9;
     font-weight: 700;
-    border-left: 4px solid #c5a059;
+    border-left: 4px solid #0d5bd9;
 }
-QFrame#Kart {
+QFrame#PortalKart {
     background-color: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #e5e9f0;
     border-radius: 6px;
 }
-QLabel#KartBaslik {
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 600;
+QFrame#MetrikKutu {
+    background-color: #ffffff;
+    border: 1px solid #edf1f7;
+    border-radius: 4px;
 }
-QLabel#KartDeger {
-    color: #0f172a;
+QFrame#HizmetKart {
+    background-color: #ffffff;
+    border: 1px solid #e8ecf2;
+    border-radius: 6px;
+}
+QFrame#HizmetKart:hover {
+    border: 1px solid #93c5fd;
+    background-color: #f8fafc;
+}
+QPushButton#HizliIslemBtn {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    padding: 12px 14px;
+    text-align: left;
+    font-weight: 700;
+    color: #093567;
+    font-size: 12px;
+}
+QPushButton#HizliIslemBtn:hover {
+    border: 1px solid #3b82f6;
+    background-color: #f0f7ff;
+}
+QLabel#BolumBaslik {
+    color: #5b87b8;
+    font-size: 17px;
+    font-weight: 500;
+}
+QLabel#SayfaBaslik {
+    color: #093567;
     font-size: 16px;
     font-weight: 700;
 }
-QLabel#SayfaBaslik {
-    color: #0b2239;
-    font-size: 15px;
-    font-weight: 700;
-}
 QPushButton#BirincilBtn {
-    background-color: #1d4ed8;
+    background-color: #0d5bd9;
     color: #ffffff;
     border: none;
     border-radius: 4px;
@@ -66,7 +88,7 @@ QPushButton#BirincilBtn {
     font-weight: 600;
 }
 QPushButton#BirincilBtn:hover {
-    background-color: #1e40af;
+    background-color: #0947ad;
 }
 QPushButton#TehlikeBtn {
     background-color: #dc2626;
@@ -77,28 +99,31 @@ QPushButton#TehlikeBtn {
     font-weight: 600;
 }
 QPushButton#IkincilBtn {
-    background-color: #e2e8f0;
+    background-color: #f1f5f9;
     color: #1e293b;
     border: 1px solid #cbd5e1;
     border-radius: 4px;
     padding: 5px 12px;
     font-weight: 600;
 }
+QPushButton#IkincilBtn:hover {
+    background-color: #e2e8f0;
+}
 QTableWidget {
     background-color: #ffffff;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #dce3ec;
     border-radius: 4px;
-    gridline-color: #e2e8f0;
+    gridline-color: #eef2f6;
     selection-background-color: #dbeafe;
-    selection-color: #1e3a8a;
+    selection-color: #093567;
 }
 QHeaderView::section {
-    background-color: #f1f5f9;
-    color: #334155;
+    background-color: #f8fafc;
+    color: #3b6998;
     font-weight: 700;
     padding: 6px 8px;
     border: none;
-    border-bottom: 1px solid #cbd5e1;
-    border-right: 1px solid #e2e8f0;
+    border-bottom: 1px solid #dce3ec;
+    border-right: 1px solid #eef2f6;
 }
 """
