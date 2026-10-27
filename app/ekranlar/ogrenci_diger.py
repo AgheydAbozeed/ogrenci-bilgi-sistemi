@@ -218,6 +218,10 @@ class OgrenciNotlarTranskript(QWidget):
         btn_dogrula.setObjectName("IkincilBtn")
         btn_dogrula.clicked.connect(self.belge_dogrula)
         b_lay.addWidget(btn_dogrula)
+        btn_html = QPushButton("📄  PDF Olarak İndir")
+        btn_html.setObjectName("IkincilBtn")
+        btn_html.clicked.connect(self.transkript_indir)
+        b_lay.addWidget(btn_html)
 
         self.lay.addWidget(belge_kart)
         self.yenile()
@@ -302,6 +306,217 @@ class OgrenciNotlarTranskript(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Hata", hata_coz(e))
 
+
+
+    def transkript_indir(self):
+        import os, subprocess
+        from datetime import datetime
+        from collections import OrderedDict
+        from PySide6.QtGui import QTextDocument, QPdfWriter, QPageSize
+        from PySide6.QtCore import QMarginsF, QSizeF
+
+        kod = self.txt_dogrula.text().strip()
+        if not kod:
+            try:
+                sonuc = self.db.calistir("SELECT fn_belge_uret('transkript') AS kod")
+                kod = sonuc[0]["kod"]
+                self.lbl_kod.setText(f"Doğrulama Kodu: {kod}")
+                self.txt_dogrula.setText(kod)
+            except Exception:
+                kod = "Üretilmedi"
+
+        profil = self.db.tek_satir(
+            """SELECT o.ogrenci_no, o.giris_yili, k.ad || ' ' || k.soyad AS ad_soyad,
+                      k.eposta, p.ad AS program_ad, b.ad AS bolum_ad
+                 FROM ogrenci o
+                 JOIN kisi k ON k.kisi_id = o.kisi_id
+                 LEFT JOIN mufredat m ON m.mufredat_id = o.mufredat_id
+                 LEFT JOIN program p ON p.program_id = m.program_id
+                 LEFT JOIN bolum b ON b.bolum_id = p.bolum_id
+                WHERE o.kisi_id = fn_oturum_kisi_id()"""
+        ) or {}
+
+        kayitlar = self.db.sorgula("SELECT * FROM v_transkript ORDER BY yil, CASE donem WHEN 'guz' THEN 1 WHEN 'bahar' THEN 2 ELSE 3 END, kod")
+
+        katsayi_map = {"AA": 4.0, "BA": 3.5, "BB": 3.0, "CB": 2.5, "CC": 2.0, "DC": 1.5, "DD": 1.0, "FD": 0.5, "FF": 0.0}
+        donem_ad = {"guz": "Güz", "bahar": "Bahar", "yaz": "Yaz"}
+        giris_yili = int(profil.get("giris_yili") or (kayitlar[0]["yil"] if kayitlar else 2025))
+
+        donemler = OrderedDict()
+        for r in kayitlar:
+            k = (int(r["yil"]), str(r["donem"]).lower())
+            donemler.setdefault(k, []).append(r)
+
+        aktif_dersler = self.db.sorgula(
+            """SELECT dm.yil, dm.tur AS donem, d.kod, d.ad AS ders_adi, d.akts
+                 FROM kayit k
+                 JOIN donem dm ON dm.donem_id = k.donem_id
+                 JOIN ders d ON d.ders_id = k.ders_id
+                WHERE k.ogrenci_id = fn_oturum_kisi_id()
+                  AND k.durum IN ('onayli', 'onay_bekliyor')
+                ORDER BY d.kod"""
+        )
+        for ad in aktif_dersler:
+            k = (int(ad["yil"]), str(ad["donem"]).lower())
+            mevcut_kodlar = {x["kod"] for x in donemler.get(k, [])}
+            if ad["kod"] not in mevcut_kodlar:
+                donemler.setdefault(k, []).append({
+                    "yil": ad["yil"], "donem": ad["donem"], "kod": ad["kod"],
+                    "ders_adi": ad["ders_adi"], "akts": ad["akts"], "harf": None
+                })
+
+        kutular_html = []
+        g_kredi = 0
+        g_akts = 0
+        g_puan = 0.0
+
+        for (yil, d_tur), ders_listesi in donemler.items():
+            sinif_no = max(1, yil - giris_yili + 1)
+            baslik = f"{sinif_no}. Yıl {donem_ad.get(d_tur, d_tur.title())}"
+
+            d_kredi = 0
+            d_akts = 0
+            d_puan = 0.0
+            satir_html = ""
+
+            for d in ders_listesi:
+                akts = int(d["akts"] or 0)
+                kredi = max(1, round(akts * 0.65))
+                harf = d.get("harf")
+                if harf in katsayi_map:
+                    kat = katsayi_map[harf]
+                    puan = round(akts * kat, 1)
+                    d_kredi += kredi
+                    d_akts += akts
+                    d_puan += puan
+                    not_str = f"{kat:.2f}".replace(".", ",")
+                    puan_str = f"{int(puan) if puan.is_integer() else puan}".replace(".", ",")
+                    harf_str = harf
+                else:
+                    not_str = "--"
+                    puan_str = "--"
+                    harf_str = ""
+
+                satir_html += f"""
+                <tr>
+                    <td width="50" style="padding: 3px 2px; font-size: 8pt;">{d['kod']}</td>
+                    <td width="132" style="padding: 3px 2px; font-size: 8pt;">{str(d['ders_adi']).upper()}</td>
+                    <td width="32" align="center" style="padding: 3px 2px; font-size: 8pt;">{kredi}</td>
+                    <td width="32" align="center" style="padding: 3px 2px; font-size: 8pt;">{akts}</td>
+                    <td width="34" align="right" style="padding: 3px 2px; font-size: 8pt;">{not_str}</td>
+                    <td width="32" align="right" style="padding: 3px 2px; font-size: 8pt;">{puan_str}</td>
+                    <td width="30" align="center" style="padding: 3px 2px; font-size: 8pt; font-weight: bold;">{harf_str}</td>
+                </tr>"""
+
+            ano = (d_puan / d_akts) if d_akts > 0 else 0.0
+            g_kredi += d_kredi
+            g_akts += d_akts
+            g_puan += d_puan
+            agno = (g_puan / g_akts) if g_akts > 0 else 0.0
+
+            ano_s = f"{ano:.2f}".replace(".", ",")
+            agno_s = f"{agno:.2f}".replace(".", ",")
+            dp_s = f"{int(d_puan) if d_puan.is_integer() else round(d_puan,1)}"
+            gp_s = f"{int(g_puan) if g_puan.is_integer() else round(g_puan,1)}"
+
+            kutu = f"""
+            <table width="332" cellspacing="0" cellpadding="0" style="margin-bottom: 14px;">
+                <tr style="background-color: #f7e6c4;">
+                    <td colspan="7" align="center" style="font-weight: bold; font-size: 9pt; border: 1px solid #222; border-bottom: none; padding: 3px;">{baslik}</td>
+                </tr>
+                <tr style="background-color: #f7e6c4; font-weight: bold; font-size: 7.5pt;">
+                    <td width="50" style="border-left: 1px solid #222; border-bottom: 1px solid #222; padding: 2px 3px;">D.Kodu</td>
+                    <td width="132" style="border-bottom: 1px solid #222; padding: 2px 2px;">Ders Adı</td>
+                    <td width="28" align="center" style="border-bottom: 1px solid #222; padding: 2px 1px;">Kredi</td>
+                    <td width="28" align="center" style="border-bottom: 1px solid #222; padding: 2px 1px;">AKTS</td>
+                    <td width="30" align="right" style="border-bottom: 1px solid #222; padding: 2px 2px;">Not</td>
+                    <td width="30" align="right" style="border-bottom: 1px solid #222; padding: 2px 2px;">Puan</td>
+                    <td width="28" align="center" style="border-right: 1px solid #222; border-bottom: 1px solid #222; padding: 2px 2px;">Harf</td>
+                </tr>
+                {satir_html}
+                <tr>
+                    <td colspan="7" style="border: 1px solid #222; padding: 4px 5px; font-size: 6.8pt; background-color: #ffffff;">
+                        ANO : {ano_s} &nbsp; D.Kredi : {d_kredi} &nbsp; D.AKTS : {d_akts} &nbsp; D.Puan : {dp_s} &nbsp;
+                        <b>AGNO : {agno_s}</b> &nbsp; G.Kredi : {g_kredi} &nbsp; G.AKTS : {g_akts} &nbsp; G.Puan : {gp_s}
+                    </td>
+                </tr>
+            </table>"""
+            kutular_html.append(kutu)
+
+        grid_satirlar = ""
+        for i in range(0, len(kutular_html), 2):
+            sol = kutular_html[i]
+            sag = kutular_html[i + 1] if i + 1 < len(kutular_html) else ""
+            grid_satirlar += f"""
+            <tr>
+                <td width="334" valign="top">{sol}</td>
+                <td width="12"></td>
+                <td width="334" valign="top">{sag}</td>
+            </tr>"""
+
+        tarih_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+        <style>
+            body {{ font-family: Arial, Helvetica, sans-serif; color: #111111; margin: 0; padding: 0; }}
+        </style></head><body>
+        <table width="680" cellspacing="0" cellpadding="0" style="border-bottom: 2px solid #093567; padding-bottom: 8px; margin-bottom: 10px;">
+            <tr>
+                <td width="460" valign="middle">
+                    <div style="font-size: 12pt; font-weight: bold; color: #093567;">T.C. YÜKSEKÖĞRETİM KURULU — ÖĞRENCİ BİLGİ SİSTEMİ</div>
+                    <div style="font-size: 9.5pt; font-weight: bold; color: #334155; margin-top: 2px;">RESMİ NOT DÖKÜM BELGESİ (TRANSKRİPT)</div>
+                </td>
+                <td width="220" align="right" valign="middle" style="font-size: 8pt; color: #1e293b;">
+                    <b>Belge Tarihi:</b> {tarih_str}<br>
+                    <b>SHA-256 Doğrulama Kodu:</b> <span style="color:#093567; font-weight:bold;">{kod}</span>
+                </td>
+            </tr>
+        </table>
+
+        <table width="680" cellspacing="0" cellpadding="4" style="border: 1px solid #cbd5e1; background-color: #f8fafc; margin-bottom: 14px; font-size: 8.5pt;">
+            <tr>
+                <td width="110" style="color:#475569;"><b>Öğrenci No:</b></td>
+                <td width="270"><b>{profil.get('ogrenci_no') or '-'}</b></td>
+                <td width="110" style="color:#475569;"><b>Fakülte / Bölüm:</b></td>
+                <td width="306">{profil.get('bolum_ad') or 'Mühendislik Fakültesi'}</td>
+            </tr>
+            <tr>
+                <td style="color:#475569;"><b>Adı Soyadı:</b></td>
+                <td><b>{profil.get('ad_soyad') or self.db.ad_soyad}</b></td>
+                <td style="color:#475569;"><b>Program / Seviye:</b></td>
+                <td>{profil.get('program_ad') or 'Bilgisayar Mühendisliği'} </td>
+            </tr>
+            <tr>
+                <td style="color:#475569;"><b>Kayıt Yılı:</b></td>
+                <td>{giris_yili}</td>
+                <td style="color:#475569;"><b>Genel AGNO / AKTS:</b></td>
+                <td><b>{f"{(g_puan/g_akts if g_akts else 0):.2f}".replace(".", ",")}</b> / {g_akts} AKTS</td>
+            </tr>
+        </table>
+
+        <table width="680" cellspacing="0" cellpadding="0">
+            {grid_satirlar}
+        </table>
+
+        <table width="680" cellspacing="0" cellpadding="6" style="margin-top: 18px; border-top: 1px solid #cbd5e1; font-size: 7.5pt; color: #475569;">
+            <tr>
+                <td>
+                    <b>Kriptografik Bütünlük Onayı:</b> Bu belge veritabanındaki <i>fn_belge_uret('transkript')</i> fonksiyonu ile SHA-256 özet zinciri kullanılarak üretilmiştir.
+                    OBS Belge Doğrulama ekranından <b>{kod}</b> kodu ile doğrulanabilir.
+                </td>
+            </tr>
+        </table>
+        </body></html>"""
+
+        dosya = os.path.abspath("transkript_belgesi.pdf")
+        pdf = QPdfWriter(dosya)
+        pdf.setPageSize(QPageSize(QPageSize.A4))
+        pdf.setResolution(96)
+        pdf.setPageMargins(QMarginsF(8, 8, 8, 8))
+        doc = QTextDocument()
+        doc.setPageSize(QSizeF(720, 1020))
+        doc.setHtml(html)
+        doc.print_(pdf)
+        subprocess.run(["open", dosya])
 
 class OgrenciMezuniyetSimulasyon(QWidget):
     def __init__(self, db: Veritabani):

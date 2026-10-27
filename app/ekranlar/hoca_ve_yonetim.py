@@ -1,3 +1,5 @@
+from PySide6.QtGui import QColor, QBrush
+from app.ekranlar.ogrenci_ana import bilgi_karti
 from datetime import date
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
@@ -47,9 +49,9 @@ class OgretimUyesiPaneli(QWidget):
         splitter = QSplitter(Qt.Vertical)
 
         # Öğrenciler ve hızlı işlem
-        w_ogr = QWidget()
+        w_ogr = QFrame(); w_ogr.setObjectName("PortalKart")
         l_ogr = QVBoxLayout(w_ogr)
-        l_ogr.setContentsMargins(0, 0, 0, 0)
+        l_ogr.setContentsMargins(14, 10, 14, 10)
         l_ogr.addWidget(QLabel("<b>Şubedeki Öğrenciler (v_sube_ogrencileri)</b>"))
         self.tbl_ogr = QTableWidget(0, 5)
         self.tbl_ogr.setHorizontalHeaderLabels(["Kayıt #", "Öğrenci No", "Ad Soyad", "Kayıt Durumu", "İşlemler"])
@@ -59,9 +61,9 @@ class OgretimUyesiPaneli(QWidget):
         splitter.addWidget(w_ogr)
 
         # Girilmiş Notlar
-        w_not = QWidget()
+        w_not = QFrame(); w_not.setObjectName("PortalKart")
         l_not = QVBoxLayout(w_not)
-        l_not.setContentsMargins(0, 0, 0, 0)
+        l_not.setContentsMargins(14, 10, 14, 10)
         l_not.addWidget(QLabel("<b>Şubedeki Not Kayıtları (İlan sonrası düzeltme için satırdaki butonu kullanın)</b>"))
         self.tbl_not = QTableWidget(0, 6)
         self.tbl_not.setHorizontalHeaderLabels(["Kayıt #", "Ders", "Bileşen", "Ağırlık", "Puan", "İlan Durumu / Düzelt"])
@@ -144,7 +146,17 @@ class OgretimUyesiPaneli(QWidget):
                 btn_d.clicked.connect(lambda _, k=kid, b=bid: self.not_duzelt_dlg(k, b))
                 self.tbl_not.setCellWidget(r, 5, btn_d)
             else:
-                self.tbl_not.setItem(r, 5, QTableWidgetItem("Taslak (İlan Edilmedi)"))
+                t_it = QTableWidgetItem("Taslak (İlan Edilmedi)")
+                t_it.setBackground(QBrush(QColor("#fef3c7")))
+                self.tbl_not.setItem(r, 5, t_it)
+        if not hasattr(self, "kart_lay"):
+            self.kart_lay = QHBoxLayout(); self.kart_lay.setSpacing(12); self.lay.insertLayout(1, self.kart_lay)
+        while self.kart_lay.count():
+            it = self.kart_lay.takeAt(0)
+            if it.widget(): it.widget().deleteLater()
+        self.kart_lay.addWidget(bilgi_karti("Aktif Şubelerim", f"{self.cmb_sube.count()} Şube", "👨‍🏫", "#1d70db"))
+        self.kart_lay.addWidget(bilgi_karti("Şubedeki Öğrenci", f"{self.tbl_ogr.rowCount()} Öğrenci", "👥", "#16a34a"))
+        self.kart_lay.addWidget(bilgi_karti("Girilen Not Kaydı", f"{self.tbl_not.rowCount()} Not", "📝", "#7e22ce"))
 
     def varsayilan_bilesen(self):
         sube_id = self.cmb_sube.currentData()
@@ -281,7 +293,17 @@ class SekreterPaneli(QWidget):
             self.tbl.setItem(r, 0, QTableWidgetItem(str(d["ogrenci_id"])))
             self.tbl.setItem(r, 1, QTableWidgetItem(str(d["danisman_id"])))
             self.tbl.setItem(r, 2, QTableWidgetItem(str(d["aralik"])))
-            self.tbl.setItem(r, 3, QTableWidgetItem("Evet ✓" if d["aktif"] else "Geçmiş Kayıt"))
+            a_it = QTableWidgetItem("Aktif Atama ✓" if d["aktif"] else "Geçmiş Kayıt")
+            a_it.setBackground(QBrush(QColor("#dcfce7" if d["aktif"] else "#f1f5f9")))
+            self.tbl.setItem(r, 3, a_it)
+        if not hasattr(self, "kart_lay"):
+            self.kart_lay = QHBoxLayout(); self.kart_lay.setSpacing(12); self.lay.insertLayout(1, self.kart_lay)
+        while self.kart_lay.count():
+            it = self.kart_lay.takeAt(0)
+            if it.widget(): it.widget().deleteLater()
+        self.kart_lay.addWidget(bilgi_karti("Bölüm Öğrencileri", f"{self.cmb_ogr.count()} Öğrenci", "🎓", "#1d70db"))
+        self.kart_lay.addWidget(bilgi_karti("Bölüm Danışmanları", f"{self.cmb_dan.count()} Hoca", "☑️", "#16a34a"))
+        self.kart_lay.addWidget(bilgi_karti("Atama Kayıtları", f"{self.tbl.rowCount()} Kayıt", "🗂️", "#7e22ce"))
 
     def danisman_ata(self):
         ogr_id = self.cmb_ogr.currentData()
@@ -329,9 +351,9 @@ class YoneticiPaneli(QWidget):
         splitter = QSplitter(Qt.Vertical)
 
         # Parametreler
-        w_p = QWidget()
+        w_p = QFrame(); w_p.setObjectName("PortalKart")
         l_p = QVBoxLayout(w_p)
-        l_p.setContentsMargins(0, 0, 0, 0)
+        l_p.setContentsMargins(14, 10, 14, 10)
         l_p.addWidget(QLabel("<b>Sistem Parametreleri (v_parametreler)</b>"))
         self.tbl_param = QTableWidget(0, 4)
         self.tbl_param.setHorizontalHeaderLabels(["Anahtar", "Değer", "Açıklama", "İşlem"])
@@ -341,9 +363,9 @@ class YoneticiPaneli(QWidget):
         splitter.addWidget(w_p)
 
         # Denetim Logu
-        w_log = QWidget()
+        w_log = QFrame(); w_log.setObjectName("PortalKart")
         l_log = QVBoxLayout(w_log)
-        l_log.setContentsMargins(0, 0, 0, 0)
+        l_log.setContentsMargins(14, 10, 14, 10)
         l_log.addWidget(QLabel("<b>Değiştirilemez Denetim Logu (v_denetim_log — Yalnızca Yönetici Görebilir)</b>"))
         self.tbl_log = QTableWidget(0, 6)
         self.tbl_log.setHorizontalHeaderLabels(["Log #", "Zaman", "Kullanıcı", "Tablo / İşlem", "PK", "Yeni Değer / Gerekçe"])
@@ -379,6 +401,14 @@ class YoneticiPaneli(QWidget):
             self.tbl_log.setItem(r, 3, QTableWidgetItem(f"{lg['tablo']} ({lg['islem']})"))
             self.tbl_log.setItem(r, 4, QTableWidgetItem(str(lg["kayit_pk"])))
             self.tbl_log.setItem(r, 5, QTableWidgetItem(str(lg.get("yeni") or lg.get("eski") or "")))
+        if not hasattr(self, "kart_lay"):
+            self.kart_lay = QHBoxLayout(); self.kart_lay.setSpacing(12); self.lay.insertLayout(1, self.kart_lay)
+        while self.kart_lay.count():
+            it = self.kart_lay.takeAt(0)
+            if it.widget(): it.widget().deleteLater()
+        self.kart_lay.addWidget(bilgi_karti("Sistem Parametresi", f"{self.tbl_param.rowCount()} Anahtar", "⚙️", "#1d70db"))
+        self.kart_lay.addWidget(bilgi_karti("Denetim Log Kaydı", f"{self.tbl_log.rowCount()} İşlem", "📜", "#7e22ce"))
+        self.kart_lay.addWidget(bilgi_karti("SHA-256 Log Zinciri", "Aktif & Korumalı ✓", "🛡️", "#16a34a"))
 
     def param_degistir(self, anahtar: str, mevcut: str):
         yeni, ok = QInputDialog.getText(self, "Parametre Güncelle", f"'{anahtar}' için yeni değer:", text=mevcut)

@@ -416,7 +416,20 @@ class OgrenciDersSecimi(QWidget):
         ust_w = QWidget()
         u_lay = QVBoxLayout(ust_w)
         u_lay.setContentsMargins(0, 0, 0, 0)
-        u_lay.addWidget(QLabel("<b>Açık Şubeler (Müfredatınızdaki Dersler)</b>"))
+        from PySide6.QtWidgets import QLineEdit
+        arama_lay = QHBoxLayout()
+        arama_lay.addWidget(QLabel("<b>Açık Şubeler (Müfredatınızdaki Dersler)</b>"))
+        arama_lay.addStretch()
+        self.txt_ara = QLineEdit()
+        self.txt_ara.setPlaceholderText("🔍 Ders kodu, ders adı veya öğretim üyesi ara...")
+        self.txt_ara.setFixedWidth(300)
+        self.txt_ara.textChanged.connect(self.sube_filtrele)
+        arama_lay.addWidget(self.txt_ara)
+        btn_takvim = QPushButton("📅  Haftalık Ders Programı Matrisi")
+        btn_takvim.setObjectName("IkincilBtn")
+        btn_takvim.clicked.connect(self.haftalik_program_goster)
+        arama_lay.addWidget(btn_takvim)
+        u_lay.addLayout(arama_lay)
         self.tbl_subeler = QTableWidget(0, 8)
         self.tbl_subeler.setHorizontalHeaderLabels(
             ["Kod", "Ders Adı", "AKTS", "Şube", "Öğretim Üyesi", "Saatler", "Durum / Neden", "İşlem"]
@@ -566,3 +579,117 @@ class OgrenciDersSecimi(QWidget):
                 QMessageBox.information(self, "Başarılı", f"{tamam} ders danışman onayına gönderildi.")
         except Exception as e:
             QMessageBox.warning(self, "İşlem Hatası", hata_coz(e))
+
+    def sube_filtrele(self, metin: str):
+        q = metin.strip().lower()
+        for r in range(self.tbl_subeler.rowCount()):
+            eslesti = any(
+                q in (self.tbl_subeler.item(r, c).text().lower() if self.tbl_subeler.item(r, c) else "")
+                for c in (0, 1, 4, 6)
+            )
+            self.tbl_subeler.setRowHidden(r, not eslesti)
+
+    def haftalik_program_goster(self):
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView
+        from PySide6.QtGui import QColor, QBrush, QFont
+        from PySide6.QtCore import Qt
+        import re
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("📅 Haftalık Ders Programı ve Saat Çakışma Matrisi")
+        dlg.resize(920, 560)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(16, 16, 16, 16)
+        lay.setSpacing(10)
+
+        baslik = QLabel("<b>Haftalık Ders Programı Zaman Çizelgesi (Seçilen & Açık Şubeler)</b>")
+        baslik.setStyleSheet("font-size: 14px; color: #093567;")
+        lay.addWidget(baslik)
+
+        lejant = QHBoxLayout()
+        for renk, metin in [
+            ("#dcfce7", "■ Kesinleşmiş / Onaylı Dersim"),
+            ("#dbeafe", "■ Sepetteki Dersim"),
+            ("#fef3c7", "■ Açık Şube (Seçilebilir)"),
+            ("#fee2e2", "⚡ Saat Çakışması Olan Şube"),
+        ]:
+            lbl = QLabel(metin)
+            lbl.setStyleSheet(f"background:{renk}; padding:4px 10px; border-radius:4px; font-weight:600; font-size:11px; color:#1e293b;")
+            lejant.addWidget(lbl)
+        lejant.addStretch()
+        lay.addLayout(lejant)
+
+        gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"]
+        gun_kod = {"pzt": 0, "pazartesi": 0, "sal": 1, "sali": 1, "salı": 1, "car": 2, "çar": 2, "carsamba": 2, "çarşamba": 2, "per": 3, "persembe": 3, "perşembe": 3, "cum": 4, "cuma": 4}
+        saatler = [f"{h:02d}:00 - {h+1:02d}:00" for h in range(9, 17)]
+
+        grid = QTableWidget(len(saatler), len(gunler))
+        grid.setHorizontalHeaderLabels(gunler)
+        grid.setVerticalHeaderLabels(saatler)
+        grid.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        grid.verticalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        grid.setEditTriggers(QTableWidget.NoEditTriggers)
+
+        # 1. Ogrencinin sepetteki / onayli derslerinin kod ve saatlerini topla
+        secili_kodlar = {}
+        for r in range(self.tbl_kayitlar.rowCount()):
+            kod = self.tbl_kayitlar.item(r, 1).text() if self.tbl_kayitlar.item(r, 1) else ""
+            durum = self.tbl_kayitlar.item(r, 4).text() if self.tbl_kayitlar.item(r, 4) else ""
+            if durum in ("sepet", "onay_bekliyor", "onayli"):
+                secili_kodlar[kod] = durum
+
+        dolu_hucreler = {}
+        sube_verileri = []
+        for r in range(self.tbl_subeler.rowCount()):
+            kod = self.tbl_subeler.item(r, 0).text() if self.tbl_subeler.item(r, 0) else ""
+            ad = self.tbl_subeler.item(r, 1).text() if self.tbl_subeler.item(r, 1) else ""
+            saat_metin = self.tbl_subeler.item(r, 5).text() if self.tbl_subeler.item(r, 5) else ""
+            sube_verileri.append((kod, ad, saat_metin))
+
+        def parcala(metin):
+            dilimler = []
+            for parca in metin.split(","):
+                m = re.search(r"([A-Za-zÇĞİÖŞÜçğıöşü]+)\s+(\d{1,2}):\d{2}\s*[-–]\s*(\d{1,2}):\d{2}", parca.strip())
+                if m:
+                    g_ad = m.group(1).lower()
+                    g_idx = next((v for k, v in gun_kod.items() if g_ad.startswith(k)), None)
+                    bas, bit = int(m.group(2)), int(m.group(3))
+                    if g_idx is not None:
+                        for h in range(max(9, bas), min(17, bit)):
+                            dilimler.append((h - 9, g_idx))
+            return dilimler
+
+        # Once ogrencinin kendi sectigi dersleri yerlestir
+        for kod, ad, saat_metin in sube_verileri:
+            if kod in secili_kodlar:
+                durum = secili_kodlar[kod]
+                renk = "#dcfce7" if durum in ("onayli", "onay_bekliyor") else "#dbeafe"
+                for s_idx, g_idx in parcala(saat_metin):
+                    dolu_hucreler[(s_idx, g_idx)] = kod
+                    it = QTableWidgetItem(f"✓ {kod}\n{ad[:18]} ({durum})")
+                    it.setBackground(QBrush(QColor(renk)))
+                    f = QFont(); f.setBold(True); it.setFont(f)
+                    it.setTextAlignment(Qt.AlignCenter)
+                    grid.setItem(s_idx, g_idx, it)
+
+        # Sonra diger acik subeleri ve cakismalari yerlestir
+        for kod, ad, saat_metin in sube_verileri:
+            if kod not in secili_kodlar:
+                for s_idx, g_idx in parcala(saat_metin):
+                    mevcut = dolu_hucreler.get((s_idx, g_idx))
+                    if mevcut:
+                        eski_it = grid.item(s_idx, g_idx)
+                        eski_metin = eski_it.text() if eski_it else mevcut
+                        it = QTableWidgetItem(f"{eski_metin}\n⚡ ÇAKIŞMA: {kod}")
+                        it.setBackground(QBrush(QColor("#fee2e2")))
+                        f = QFont(); f.setBold(True); it.setFont(f)
+                        it.setTextAlignment(Qt.AlignCenter)
+                        grid.setItem(s_idx, g_idx, it)
+                    elif not grid.item(s_idx, g_idx):
+                        it = QTableWidgetItem(f"{kod} (Açık)\n{ad[:18]}")
+                        it.setBackground(QBrush(QColor("#fef3c7")))
+                        it.setTextAlignment(Qt.AlignCenter)
+                        grid.setItem(s_idx, g_idx, it)
+
+        lay.addWidget(grid, 1)
+        dlg.exec()
