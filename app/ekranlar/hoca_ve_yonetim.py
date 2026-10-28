@@ -1,3 +1,4 @@
+from app.ekranlar.db_rontgen_ve_acid import CanliEszamanlilikDialog
 from PySide6.QtGui import QColor, QBrush
 from app.ekranlar.ogrenci_ana import bilgi_karti
 from datetime import date
@@ -184,7 +185,7 @@ class OgretimUyesiPaneli(QWidget):
         if not ok2:
             return
         try:
-            self.db.calistir("SELECT fn_not_gir(%s, %s, %s)", (kayit_id, bilesen_id, puan))
+            self.db.calistir("SELECT fn_not_gir(%s::int, %s::int, %s::numeric)", (kayit_id, bilesen_id, puan))
             self.sube_yukle()
         except Exception as e:
             QMessageBox.warning(self, "Kural Engeli", hata_coz(e))
@@ -197,7 +198,7 @@ class OgretimUyesiPaneli(QWidget):
         if not ok2:
             return
         try:
-            self.db.calistir("SELECT fn_not_duzelt(%s, %s, %s, %s)", (kayit_id, bilesen_id, puan, gerekce))
+            self.db.calistir("SELECT fn_not_duzelt(%s::int, %s::int, %s::numeric, %s)", (kayit_id, bilesen_id, puan, gerekce))
             QMessageBox.information(self, "Düzeltildi", "Not güncellendi ve denetim loguna gerekçe işlendi.")
             self.sube_yukle()
         except Exception as e:
@@ -302,7 +303,7 @@ class SekreterPaneli(QWidget):
             it = self.kart_lay.takeAt(0)
             if it.widget(): it.widget().deleteLater()
         self.kart_lay.addWidget(bilgi_karti("Bölüm Öğrencileri", f"{self.cmb_ogr.count()} Öğrenci", "🎓", "#1d70db"))
-        self.kart_lay.addWidget(bilgi_karti("Bölüm Danışmanları", f"{self.cmb_dan.count()} Hoca", "☑️", "#16a34a"))
+        self.kart_lay.addWidget(bilgi_karti("Bölüm Danışmanları", f"{getattr(self, 'cmb_dan', self.cmb_hoca if hasattr(self, 'cmb_hoca') else self.cmb_ogr).count()} Hoca", "☑️", "#16a34a"))
         self.kart_lay.addWidget(bilgi_karti("Atama Kayıtları", f"{self.tbl.rowCount()} Kayıt", "🗂️", "#7e22ce"))
 
     def danisman_ata(self):

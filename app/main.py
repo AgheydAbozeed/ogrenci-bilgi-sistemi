@@ -1,3 +1,4 @@
+from app.ekranlar.db_rontgen_ve_acid import SqlRontgenDialog
 import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QDialog, QVBoxLayout, QHBoxLayout,
@@ -189,6 +190,11 @@ class AnaPencere(QMainWindow):
         btn_cikis = QPushButton("⇥ Kullanıcı Değiştir")
         btn_cikis.setObjectName("IkincilBtn")
         btn_cikis.clicked.connect(self.kullanici_degistir)
+        btn_sql = QPushButton("🔍  SQL & EXPLAIN Röntgeni")
+        btn_sql.setObjectName("UstBarBtn")
+        btn_sql.clicked.connect(lambda: SqlRontgenDialog(self.db, self).exec())
+        u_lay.addWidget(btn_sql)
+
         u_lay.addWidget(btn_cikis)
 
         sag_govde.addWidget(ust)

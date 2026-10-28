@@ -1,3 +1,4 @@
+from app.ekranlar.db_rontgen_ve_acid import AcidDeneGeriAlDialog
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QFrame,
     QTableWidget, QTableWidgetItem, QPushButton, QHeaderView,
@@ -527,29 +528,18 @@ class OgrenciMezuniyetSimulasyon(QWidget):
         self.lay.setSpacing(12)
 
         ust = QHBoxLayout()
-        baslik = QLabel("Mezuniyetime Ne Kaldı? — Müfredat Denetimi & DAG Simülasyonu")
+        baslik = QLabel("Mezuniyetime Ne Kaldı? — Müfredat Denetimi & ACID Simülasyonu")
         baslik.setObjectName("SayfaBaslik")
         ust.addWidget(baslik)
         ust.addStretch()
 
-        ust.addWidget(QLabel("<b>What-If Müfredat:</b>"))
-        self.cmb_muf = QComboBox()
-        self.cmb_muf.addItem("Kendi Müfredatım", None)
-        for m in self.db.sorgula("SELECT * FROM v_mufredat_listesi ORDER BY giris_yili DESC"):
-            self.cmb_muf.addItem(f"{m['program']} ({m['giris_yili']})", m["mufredat_id"])
-        self.cmb_muf.currentIndexChanged.connect(self.yenile)
-        ust.addWidget(self.cmb_muf)
+        btn_acid = QPushButton("🧪  ACID 'Dene ve Geri Al' (ROLLBACK) Simülatörü")
+        btn_acid.setObjectName("BirincilBtn")
+        btn_acid.clicked.connect(lambda: AcidDeneGeriAlDialog(self.db, self).exec())
+        ust.addWidget(btn_acid)
 
-        ust.addWidget(QLabel("<b>Dönem AKTS Limiti:</b>"))
-        self.spn_akts = QSpinBox()
-        self.spn_akts.setRange(6, 45)
-        self.spn_akts.setValue(30)
-        self.spn_akts.setSuffix(" AKTS")
-        self.spn_akts.valueChanged.connect(self.yenile)
-        ust.addWidget(self.spn_akts)
-
-        btn_yenile = QPushButton("Simülasyonu Çalıştır")
-        btn_yenile.setObjectName("BirincilBtn")
+        btn_yenile = QPushButton("Yenile")
+        btn_yenile.setObjectName("IkincilBtn")
         btn_yenile.clicked.connect(self.yenile)
         ust.addWidget(btn_yenile)
         self.lay.addLayout(ust)
@@ -558,79 +548,76 @@ class OgrenciMezuniyetSimulasyon(QWidget):
         self.kart_lay.setSpacing(12)
         self.lay.addLayout(self.kart_lay)
 
-        splitter = QSplitter(Qt.Vertical)
-
-        w1 = QFrame()
-        w1.setObjectName("PortalKart")
-        l1 = QVBoxLayout(w1)
-        l1.setContentsMargins(14, 12, 14, 12)
-        l1.addWidget(QLabel("<b>🎓  Müfredat ve Seçmeli Grup Denetimi (fn_mezuniyet_denetim_ben)</b>"))
+        k1 = QFrame(); k1.setObjectName("PortalKart")
+        l1 = QVBoxLayout(k1); l1.setContentsMargins(14, 12, 14, 12)
+        l1.addWidget(QLabel("<b>🎓 Müfredat ve Seçmeli Grup Denetimi (fn_mezuniyet_denetim_ben)</b>"))
         self.tbl_denetim = QTableWidget(0, 7)
-        self.tbl_denetim.setHorizontalHeaderLabels(
-            ["Grup Adı", "Tür", "Min Ders", "Min AKTS", "Sayılan Ders", "Sayılan AKTS", "Durum / Eksik"]
-        )
+        self.tbl_denetim.setHorizontalHeaderLabels(["Grup Adı", "Tür", "Min Ders", "Min AKTS", "Sayılan Ders", "Sayılan AKTS", "Durum / Eksik"])
         self.tbl_denetim.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tbl_denetim.setEditTriggers(QTableWidget.NoEditTriggers)
         l1.addWidget(self.tbl_denetim)
-        splitter.addWidget(w1)
+        self.lay.addWidget(k1, 1)
 
-        w2 = QFrame()
-        w2.setObjectName("PortalKart")
-        l2 = QVBoxLayout(w2)
-        l2.setContentsMargins(14, 12, 14, 12)
-        l2.addWidget(QLabel("<b>🗓️  Önkoşul DAG Topolojik Ders Planı (fn_ders_plani_ben)</b>"))
+        k2 = QFrame(); k2.setObjectName("PortalKart")
+        l2 = QVBoxLayout(k2); l2.setContentsMargins(14, 12, 14, 12)
+        l2.addWidget(QLabel("<b>🗓️ Önkoşul DAG Topolojik Ders Planı (fn_ders_plani_ben)</b>"))
         self.tbl_plan = QTableWidget(0, 4)
         self.tbl_plan.setHorizontalHeaderLabels(["Önerilen Dönem Sırası", "Ders Kodu", "Ders Adı", "AKTS"])
         self.tbl_plan.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tbl_plan.setEditTriggers(QTableWidget.NoEditTriggers)
         l2.addWidget(self.tbl_plan)
-        splitter.addWidget(w2)
+        self.lay.addWidget(k2, 1)
 
-        self.lay.addWidget(splitter, 1)
         self.yenile()
 
     def yenile(self):
         while self.kart_lay.count():
-            item = self.kart_lay.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            it = self.kart_lay.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
 
-        muf_id = self.cmb_muf.currentData()
-        akts_lim = self.spn_akts.value()
+        denetim = self.db.sorgula("SELECT * FROM fn_mezuniyet_denetim_ben()")
+        plan = self.db.sorgula("SELECT * FROM fn_ders_plani_ben(30)")
+        trans = self.db.sorgula("SELECT * FROM v_transkript")
 
-        ozet = self.db.tek_satir("SELECT * FROM fn_mezuniyet_ozet_ben()") or {}
-        erken = self.db.tek_satir("SELECT * FROM fn_en_erken_mezuniyet_ben(%s)", (akts_lim,)) or {}
+        katsayi = {"AA": 4.0, "BA": 3.5, "BB": 3.0, "CB": 2.5, "CC": 2.0, "DC": 1.5, "DD": 1.0, "FD": 0.5, "FF": 0.0}
+        tp, ta, ga = 0.0, 0, 0
+        for r in trans:
+            ak = int(r.get("akts") or 0)
+            h = r.get("harf")
+            if h in katsayi:
+                tp += ak * katsayi[h]; ta += ak
+            if r.get("durum") == "gecti":
+                ga += ak
+        gno = (tp / ta) if ta > 0 else 0.0
+        eksik_var = any(not d.get("tamam", False) for d in denetim)
+        max_donem = max([int(p.get("onerilen_donem") or p.get("donem_no") or 1) for p in plan], default=0)
 
-        uygun_mu = bool(ozet.get("mezuniyet_uygun"))
-        uygun_str = "Mezuniyete Uygun ✓" if uygun_mu else "Eksikler Var"
-        self.kart_lay.addWidget(bilgi_karti("Mezuniyet Durumu", uygun_str, "🎓", "#16a34a" if uygun_mu else "#dc2626"))
-        self.kart_lay.addWidget(bilgi_karti("AKTS (Geçilen / Hedef)", f"{ozet.get('gecilen_akts', 0)} / {ozet.get('gereken_akts', 30)}", "±÷", "#1d70db"))
-        self.kart_lay.addWidget(bilgi_karti("GNO (Mevcut / Min)", f"{ozet.get('gno') or '-'} / {ozet.get('min_gno', 2.00)}", "A+", "#0d9488"))
-        self.kart_lay.addWidget(bilgi_karti("DAG Kritik Yol", f"{erken.get('kritik_yol_donem', 0)} Dönem", "⛓️", "#d97706"))
-        self.kart_lay.addWidget(bilgi_karti(f"{akts_lim} AKTS Limitli Süre", f"{erken.get('akts_limitli_donem', 0)} Dönem", "⏱️", "#7e22ce"))
+        self.kart_lay.addWidget(bilgi_karti("Mezuniyet Durumu", "Eksikler Var" if eksik_var else "Mezun Olabilir ✓", "🎓", "#dc2626" if eksik_var else "#16a34a"))
+        self.kart_lay.addWidget(bilgi_karti("AKTS (Geçilen / Hedef)", f"{ga} / 240", "⚖️", "#1d70db"))
+        self.kart_lay.addWidget(bilgi_karti("GNO (Mevcut / Min)", f"{gno:.2f} / 2.00", "🅰️", "#16a34a"))
+        self.kart_lay.addWidget(bilgi_karti("DAG Kritik Yol", f"{max_donem} Dönem", "🕸️", "#7e22ce"))
 
-        denetimler = self.db.sorgula("SELECT * FROM fn_mezuniyet_denetim_ben(%s)", (muf_id,))
         self.tbl_denetim.setRowCount(0)
-        for d in denetimler:
-            r = self.tbl_denetim.rowCount()
-            self.tbl_denetim.insertRow(r)
-            self.tbl_denetim.setItem(r, 0, QTableWidgetItem(str(d["grup_ad"])))
-            self.tbl_denetim.setItem(r, 1, QTableWidgetItem(str(d["tur"])))
-            self.tbl_denetim.setItem(r, 2, QTableWidgetItem(str(d["min_ders"])))
-            self.tbl_denetim.setItem(r, 3, QTableWidgetItem(str(d["min_akts"])))
-            self.tbl_denetim.setItem(r, 4, QTableWidgetItem(str(d["sayilan_ders"])))
-            self.tbl_denetim.setItem(r, 5, QTableWidgetItem(str(d["sayilan_akts"])))
-            durum_metin = "Tamam ✓" if d["durum"] == "tamam" else f"Eksik: {d.get('eksik') or ''}"
-            item = QTableWidgetItem(durum_metin)
-            item.setBackground(QBrush(QColor("#dcfce7" if d["durum"] == "tamam" else "#fee2e2")))
-            self.tbl_denetim.setItem(r, 6, item)
+        for d in denetim:
+            r = self.tbl_denetim.rowCount(); self.tbl_denetim.insertRow(r)
+            self.tbl_denetim.setItem(r, 0, QTableWidgetItem(str(d.get("grup_ad") or "")))
+            self.tbl_denetim.setItem(r, 1, QTableWidgetItem(str(d.get("tur") or "")))
+            self.tbl_denetim.setItem(r, 2, QTableWidgetItem(str(d.get("min_ders") or 0)))
+            self.tbl_denetim.setItem(r, 3, QTableWidgetItem(str(d.get("min_akts") or 0)))
+            self.tbl_denetim.setItem(r, 4, QTableWidgetItem(str(d.get("sayilan_ders") or 0)))
+            self.tbl_denetim.setItem(r, 5, QTableWidgetItem(str(d.get("sayilan_akts") or 0)))
+            eksik_metin = str(d.get("eksik_aciklama") or d.get("aciklama") or ("Tamam ✓" if d.get("tamam") else "Eksik"))
+            it = QTableWidgetItem(eksik_metin)
+            it.setBackground(QBrush(QColor("#dcfce7" if d.get("tamam") else "#fee2e2")))
+            self.tbl_denetim.setItem(r, 6, it)
 
-        plan = self.db.sorgula("SELECT * FROM fn_ders_plani_ben(%s)", (akts_lim,))
         self.tbl_plan.setRowCount(0)
         for p in plan:
-            r = self.tbl_plan.rowCount()
-            self.tbl_plan.insertRow(r)
-            self.tbl_plan.setItem(r, 0, QTableWidgetItem(f"{p['donem_sira']}. Dönem"))
-            self.tbl_plan.setItem(r, 1, QTableWidgetItem(str(p["ders_kod"])))
-            self.tbl_plan.setItem(r, 2, QTableWidgetItem(str(p["ders_ad"])))
-            self.tbl_plan.setItem(r, 3, QTableWidgetItem(str(p["akts"])))
+            r = self.tbl_plan.rowCount(); self.tbl_plan.insertRow(r)
+            d_no = p.get("onerilen_donem") or p.get("donem_no") or 1
+            self.tbl_plan.setItem(r, 0, QTableWidgetItem(f"{d_no}. Dönem"))
+            self.tbl_plan.setItem(r, 1, QTableWidgetItem(str(p.get("ders_kod") or p.get("kod") or "")))
+            self.tbl_plan.setItem(r, 2, QTableWidgetItem(str(p.get("ders_ad") or p.get("ad") or "")))
+            self.tbl_plan.setItem(r, 3, QTableWidgetItem(str(p.get("akts") or 0)))
+

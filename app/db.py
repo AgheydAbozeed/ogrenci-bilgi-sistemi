@@ -31,6 +31,8 @@ def hata_coz(exc: Exception) -> str:
 
 class Veritabani:
     def __init__(self):
+        import os
+        self.dsn = os.getenv('DATABASE_URL', 'postgresql://localhost/obs')
         self.conninfo = (
             f"host={os.getenv('DB_HOST', 'localhost')} "
             f"port={os.getenv('DB_PORT', '5431')} "
@@ -40,6 +42,7 @@ class Veritabani:
         )
         self.kisi_id: int | None = None
         self.ad_soyad: str = ""
+        self.sql_gecmisi: list[tuple[str, tuple | None]] = []
         self.aktif_rol: str = "obs_login"
         self.roller: list[str] = []
 
@@ -58,6 +61,7 @@ class Veritabani:
         with psycopg.connect(self.conninfo, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 self._baglam_uygula(cur)
+                self.sql_gecmisi.append((sql, params))
                 cur.execute(sql, params)
                 return cur.fetchall() if cur.description else []
 
@@ -69,6 +73,7 @@ class Veritabani:
         with psycopg.connect(self.conninfo, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 self._baglam_uygula(cur)
+                self.sql_gecmisi.append((sql, params))
                 cur.execute(sql, params)
                 sonuc = cur.fetchall() if cur.description else []
             conn.commit()
