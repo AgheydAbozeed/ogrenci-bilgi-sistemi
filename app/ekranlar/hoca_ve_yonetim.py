@@ -1,14 +1,14 @@
-from app.ekranlar.db_rontgen_ve_acid import CanliEszamanlilikDialog
-from PySide6.QtGui import QColor, QBrush
-from app.ekranlar.ogrenci_ana import bilgi_karti
 from datetime import date
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QTableWidget, QTableWidgetItem, QPushButton, QHeaderView,
-    QComboBox, QLineEdit, QInputDialog, QMessageBox, QSplitter
+    QComboBox, QInputDialog, QMessageBox, QSplitter
 )
 from PySide6.QtCore import Qt
-from app.db import Veritabani, hata_coz
+from PySide6.QtGui import QColor, QBrush
+from app.db import Veritabani, hata_goster
+from app.stil import OLCULER
+from app.ekranlar.ogrenci_ana import bilgi_karti
 
 
 class OgretimUyesiPaneli(QWidget):
@@ -47,28 +47,34 @@ class OgretimUyesiPaneli(QWidget):
         ust.addWidget(btn_hesapla)
         self.lay.addLayout(ust)
 
+        self.kart_lay = QHBoxLayout()
+        self.kart_lay.setSpacing(12)
+        self.lay.addLayout(self.kart_lay)
+
         splitter = QSplitter(Qt.Vertical)
 
-        # Öğrenciler ve hızlı işlem
-        w_ogr = QFrame(); w_ogr.setObjectName("PortalKart")
+        w_ogr = QFrame()
+        w_ogr.setObjectName("PortalKart")
         l_ogr = QVBoxLayout(w_ogr)
         l_ogr.setContentsMargins(14, 10, 14, 10)
         l_ogr.addWidget(QLabel("<b>Şubedeki Öğrenciler (v_sube_ogrencileri)</b>"))
         self.tbl_ogr = QTableWidget(0, 5)
         self.tbl_ogr.setHorizontalHeaderLabels(["Kayıt #", "Öğrenci No", "Ad Soyad", "Kayıt Durumu", "İşlemler"])
         self.tbl_ogr.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_ogr.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_ogr.setEditTriggers(QTableWidget.NoEditTriggers)
         l_ogr.addWidget(self.tbl_ogr)
         splitter.addWidget(w_ogr)
 
-        # Girilmiş Notlar
-        w_not = QFrame(); w_not.setObjectName("PortalKart")
+        w_not = QFrame()
+        w_not.setObjectName("PortalKart")
         l_not = QVBoxLayout(w_not)
         l_not.setContentsMargins(14, 10, 14, 10)
         l_not.addWidget(QLabel("<b>Şubedeki Not Kayıtları (İlan sonrası düzeltme için satırdaki butonu kullanın)</b>"))
         self.tbl_not = QTableWidget(0, 6)
         self.tbl_not.setHorizontalHeaderLabels(["Kayıt #", "Ders", "Bileşen", "Ağırlık", "Puan", "İlan Durumu / Düzelt"])
         self.tbl_not.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_not.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_not.setEditTriggers(QTableWidget.NoEditTriggers)
         l_not.addWidget(self.tbl_not)
         splitter.addWidget(w_not)
@@ -147,17 +153,18 @@ class OgretimUyesiPaneli(QWidget):
                 btn_d.clicked.connect(lambda _, k=kid, b=bid: self.not_duzelt_dlg(k, b))
                 self.tbl_not.setCellWidget(r, 5, btn_d)
             else:
-                t_it = QTableWidgetItem("Taslak (İlan Edilmedi)")
-                t_it.setBackground(QBrush(QColor("#fef3c7")))
+                t_it = QTableWidgetItem("⏳ Taslak (İlan Edilmedi)")
+                t_it.setBackground(QBrush(QColor("#FEF3C7")))
+                t_it.setForeground(QBrush(QColor("#92400E")))
                 self.tbl_not.setItem(r, 5, t_it)
-        if not hasattr(self, "kart_lay"):
-            self.kart_lay = QHBoxLayout(); self.kart_lay.setSpacing(12); self.lay.insertLayout(1, self.kart_lay)
+
         while self.kart_lay.count():
             it = self.kart_lay.takeAt(0)
-            if it.widget(): it.widget().deleteLater()
-        self.kart_lay.addWidget(bilgi_karti("Aktif Şubelerim", f"{self.cmb_sube.count()} Şube", "👨‍🏫", "#1d70db"))
-        self.kart_lay.addWidget(bilgi_karti("Şubedeki Öğrenci", f"{self.tbl_ogr.rowCount()} Öğrenci", "👥", "#16a34a"))
-        self.kart_lay.addWidget(bilgi_karti("Girilen Not Kaydı", f"{self.tbl_not.rowCount()} Not", "📝", "#7e22ce"))
+            if it.widget():
+                it.widget().deleteLater()
+        self.kart_lay.addWidget(bilgi_karti("Aktif Şubelerim", f"{self.cmb_sube.count()} Şube", "👨‍🏫", "#2563EB"))
+        self.kart_lay.addWidget(bilgi_karti("Şubedeki Öğrenci", f"{self.tbl_ogr.rowCount()} Öğrenci", "👥", "#15803D"))
+        self.kart_lay.addWidget(bilgi_karti("Girilen Not Kaydı", f"{self.tbl_not.rowCount()} Not", "📝", "#2563EB"))
 
     def varsayilan_bilesen(self):
         sube_id = self.cmb_sube.currentData()
@@ -167,10 +174,10 @@ class OgretimUyesiPaneli(QWidget):
             self.db.calistir(
                 "SELECT fn_bilesenleri_belirle(%s, ARRAY['Vize','Final'], ARRAY[40, 60])", (sube_id,)
             )
-            QMessageBox.information(self, "Başarılı", "Vize (%40) ve Final (%60) bileşenleri tanımlandı.")
+            QMessageBox.information(self, "Başarılı ✔", "Vize (%40) ve Final (%60) bileşenleri tanımlandı.")
             self.sube_yukle()
         except Exception as e:
-            QMessageBox.warning(self, "Kural Engeli", hata_coz(e))
+            hata_goster(self, "Kural Engeli", e)
 
     def not_gir_dlg(self, kayit_id: int, bilesenler: list[dict]):
         if not bilesenler:
@@ -188,7 +195,7 @@ class OgretimUyesiPaneli(QWidget):
             self.db.calistir("SELECT fn_not_gir(%s::int, %s::int, %s::numeric)", (kayit_id, bilesen_id, puan))
             self.sube_yukle()
         except Exception as e:
-            QMessageBox.warning(self, "Kural Engeli", hata_coz(e))
+            hata_goster(self, "Kural Engeli", e)
 
     def not_duzelt_dlg(self, kayit_id: int, bilesen_id: int):
         puan, ok = QInputDialog.getDouble(self, "Yeni Puan", "Düzeltilmiş Puan (0-100):", 85, 0, 100, 1)
@@ -199,17 +206,17 @@ class OgretimUyesiPaneli(QWidget):
             return
         try:
             self.db.calistir("SELECT fn_not_duzelt(%s::int, %s::int, %s::numeric, %s)", (kayit_id, bilesen_id, puan, gerekce))
-            QMessageBox.information(self, "Düzeltildi", "Not güncellendi ve denetim loguna gerekçe işlendi.")
+            QMessageBox.information(self, "Düzeltildi ✔", "Not güncellendi ve denetim loguna gerekçe işlendi.")
             self.sube_yukle()
         except Exception as e:
-            QMessageBox.warning(self, "Kural Engeli", hata_coz(e))
+            hata_goster(self, "Kural Engeli", e)
 
     def yoklama_gir(self, kayit_id: int, katildi: bool):
         try:
             self.db.calistir("SELECT fn_yoklama_gir(%s, %s, %s)", (kayit_id, date.today(), katildi))
             QMessageBox.information(self, "Yoklama İşlendi", f"Bugün ({date.today()}) için yoklama kaydedildi.")
         except Exception as e:
-            QMessageBox.warning(self, "Hata", hata_coz(e))
+            hata_goster(self, "Hata", e)
 
     def notlari_ilan_et(self):
         sube_id = self.cmb_sube.currentData()
@@ -217,10 +224,10 @@ class OgretimUyesiPaneli(QWidget):
             return
         try:
             r = self.db.calistir("SELECT fn_not_ilan_et(%s) AS adet", (sube_id,))
-            QMessageBox.information(self, "İlan Edildi", f"{r[0]['adet']} adet taslak not ilan edildi.")
+            QMessageBox.information(self, "İlan Edildi ✔", f"{r[0]['adet']} adet taslak not ilan edildi.")
             self.sube_yukle()
         except Exception as e:
-            QMessageBox.warning(self, "Hata", hata_coz(e))
+            hata_goster(self, "Hata", e)
 
     def harf_hesapla(self):
         sube_id = self.cmb_sube.currentData()
@@ -229,11 +236,11 @@ class OgretimUyesiPaneli(QWidget):
         try:
             r = self.db.calistir("SELECT * FROM fn_sonuclari_hesapla(%s)", (sube_id,))[0]
             QMessageBox.information(
-                self, "Sonuçlar Hesaplandı",
+                self, "Sonuçlar Hesaplandı ✔",
                 f"Hesaplanan Öğrenci: {r['hesaplanan']}\nEksik Bileşenli Öğrenci: {r['eksik']}"
             )
         except Exception as e:
-            QMessageBox.warning(self, "Hata", hata_coz(e))
+            hata_goster(self, "Hata", e)
 
 
 class SekreterPaneli(QWidget):
@@ -256,8 +263,12 @@ class SekreterPaneli(QWidget):
         ust.addWidget(btn_risk)
         self.lay.addLayout(ust)
 
+        self.kart_lay = QHBoxLayout()
+        self.kart_lay.setSpacing(12)
+        self.lay.addLayout(self.kart_lay)
+
         atama_kart = QFrame()
-        atama_kart.setObjectName("Kart")
+        atama_kart.setObjectName("PortalKart")
         a_lay = QHBoxLayout(atama_kart)
         a_lay.addWidget(QLabel("<b>Öğrenci:</b>"))
         self.cmb_ogr = QComboBox()
@@ -274,6 +285,7 @@ class SekreterPaneli(QWidget):
         self.tbl = QTableWidget(0, 4)
         self.tbl.setHorizontalHeaderLabels(["Öğrenci ID", "Danışman ID", "Geçerlilik Aralığı (daterange)", "Aktif mi?"])
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         self.lay.addWidget(self.tbl, 1)
         self.yenile()
@@ -294,34 +306,35 @@ class SekreterPaneli(QWidget):
             self.tbl.setItem(r, 0, QTableWidgetItem(str(d["ogrenci_id"])))
             self.tbl.setItem(r, 1, QTableWidgetItem(str(d["danisman_id"])))
             self.tbl.setItem(r, 2, QTableWidgetItem(str(d["aralik"])))
-            a_it = QTableWidgetItem("Aktif Atama ✓" if d["aktif"] else "Geçmiş Kayıt")
-            a_it.setBackground(QBrush(QColor("#dcfce7" if d["aktif"] else "#f1f5f9")))
+            a_it = QTableWidgetItem("✔ Aktif Atama" if d["aktif"] else "— Geçmiş Kayıt")
+            a_it.setBackground(QBrush(QColor("#DCFCE7" if d["aktif"] else "#F1F5F9")))
+            a_it.setForeground(QBrush(QColor("#15803D" if d["aktif"] else "#475569")))
             self.tbl.setItem(r, 3, a_it)
-        if not hasattr(self, "kart_lay"):
-            self.kart_lay = QHBoxLayout(); self.kart_lay.setSpacing(12); self.lay.insertLayout(1, self.kart_lay)
+
         while self.kart_lay.count():
             it = self.kart_lay.takeAt(0)
-            if it.widget(): it.widget().deleteLater()
-        self.kart_lay.addWidget(bilgi_karti("Bölüm Öğrencileri", f"{self.cmb_ogr.count()} Öğrenci", "🎓", "#1d70db"))
-        self.kart_lay.addWidget(bilgi_karti("Bölüm Danışmanları", f"{getattr(self, 'cmb_dan', self.cmb_hoca if hasattr(self, 'cmb_hoca') else self.cmb_ogr).count()} Hoca", "☑️", "#16a34a"))
-        self.kart_lay.addWidget(bilgi_karti("Atama Kayıtları", f"{self.tbl.rowCount()} Kayıt", "🗂️", "#7e22ce"))
+            if it.widget():
+                it.widget().deleteLater()
+        self.kart_lay.addWidget(bilgi_karti("Bölüm Öğrencileri", f"{self.cmb_ogr.count()} Öğrenci", "🎓", "#2563EB"))
+        self.kart_lay.addWidget(bilgi_karti("Bölüm Danışmanları", f"{self.cmb_hoca.count()} Hoca", "☑️", "#15803D"))
+        self.kart_lay.addWidget(bilgi_karti("Atama Kayıtları", f"{self.tbl.rowCount()} Kayıt", "🗂️", "#2563EB"))
 
     def danisman_ata(self):
         ogr_id = self.cmb_ogr.currentData()
         hoca_id = self.cmb_hoca.currentData()
         try:
             self.db.calistir("SELECT fn_danisman_ata(%s, %s, current_date + 1)", (ogr_id, hoca_id))
-            QMessageBox.information(self, "Atandı", "Eski danışmanlık aralığı kapatıldı ve yeni danışman atandı.")
+            QMessageBox.information(self, "Atandı ✔", "Eski danışmanlık aralığı kapatıldı ve yeni danışman atandı.")
             self.yenile()
         except Exception as e:
-            QMessageBox.warning(self, "Kural Engeli", hata_coz(e))
+            hata_goster(self, "Kural Engeli", e)
 
     def risk_hesapla(self):
         try:
             r = self.db.calistir("SELECT fn_risk_bayrak_hesapla() AS toplam")[0]
-            QMessageBox.information(self, "Tamamlandı", f"Aktif dönem için toplam {r['toplam']} risk bayrağı üretildi.")
+            QMessageBox.information(self, "Tamamlandı ✔", f"Aktif dönem için toplam {r['toplam']} risk bayrağı üretildi.")
         except Exception as e:
-            QMessageBox.warning(self, "Hata", hata_coz(e))
+            hata_goster(self, "Hata", e)
 
 
 class YoneticiPaneli(QWidget):
@@ -343,34 +356,40 @@ class YoneticiPaneli(QWidget):
         btn_zincir.clicked.connect(self.zincir_dogrula)
         ust.addWidget(btn_zincir)
 
-        btn_yenile = QPushButton("Yenile")
+        btn_yenile = QPushButton("↻  Yenile (F5)")
         btn_yenile.setObjectName("IkincilBtn")
         btn_yenile.clicked.connect(self.yenile)
         ust.addWidget(btn_yenile)
         self.lay.addLayout(ust)
 
+        self.kart_lay = QHBoxLayout()
+        self.kart_lay.setSpacing(12)
+        self.lay.addLayout(self.kart_lay)
+
         splitter = QSplitter(Qt.Vertical)
 
-        # Parametreler
-        w_p = QFrame(); w_p.setObjectName("PortalKart")
+        w_p = QFrame()
+        w_p.setObjectName("PortalKart")
         l_p = QVBoxLayout(w_p)
         l_p.setContentsMargins(14, 10, 14, 10)
         l_p.addWidget(QLabel("<b>Sistem Parametreleri (v_parametreler)</b>"))
         self.tbl_param = QTableWidget(0, 4)
         self.tbl_param.setHorizontalHeaderLabels(["Anahtar", "Değer", "Açıklama", "İşlem"])
         self.tbl_param.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_param.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_param.setEditTriggers(QTableWidget.NoEditTriggers)
         l_p.addWidget(self.tbl_param)
         splitter.addWidget(w_p)
 
-        # Denetim Logu
-        w_log = QFrame(); w_log.setObjectName("PortalKart")
+        w_log = QFrame()
+        w_log.setObjectName("PortalKart")
         l_log = QVBoxLayout(w_log)
         l_log.setContentsMargins(14, 10, 14, 10)
         l_log.addWidget(QLabel("<b>Değiştirilemez Denetim Logu (v_denetim_log — Yalnızca Yönetici Görebilir)</b>"))
         self.tbl_log = QTableWidget(0, 6)
         self.tbl_log.setHorizontalHeaderLabels(["Log #", "Zaman", "Kullanıcı", "Tablo / İşlem", "PK", "Yeni Değer / Gerekçe"])
         self.tbl_log.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_log.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_log.setEditTriggers(QTableWidget.NoEditTriggers)
         l_log.addWidget(self.tbl_log)
         splitter.addWidget(w_log)
@@ -402,14 +421,14 @@ class YoneticiPaneli(QWidget):
             self.tbl_log.setItem(r, 3, QTableWidgetItem(f"{lg['tablo']} ({lg['islem']})"))
             self.tbl_log.setItem(r, 4, QTableWidgetItem(str(lg["kayit_pk"])))
             self.tbl_log.setItem(r, 5, QTableWidgetItem(str(lg.get("yeni") or lg.get("eski") or "")))
-        if not hasattr(self, "kart_lay"):
-            self.kart_lay = QHBoxLayout(); self.kart_lay.setSpacing(12); self.lay.insertLayout(1, self.kart_lay)
+
         while self.kart_lay.count():
             it = self.kart_lay.takeAt(0)
-            if it.widget(): it.widget().deleteLater()
-        self.kart_lay.addWidget(bilgi_karti("Sistem Parametresi", f"{self.tbl_param.rowCount()} Anahtar", "⚙️", "#1d70db"))
-        self.kart_lay.addWidget(bilgi_karti("Denetim Log Kaydı", f"{self.tbl_log.rowCount()} İşlem", "📜", "#7e22ce"))
-        self.kart_lay.addWidget(bilgi_karti("SHA-256 Log Zinciri", "Aktif & Korumalı ✓", "🛡️", "#16a34a"))
+            if it.widget():
+                it.widget().deleteLater()
+        self.kart_lay.addWidget(bilgi_karti("Sistem Parametresi", f"{self.tbl_param.rowCount()} Anahtar", "⚙️", "#2563EB"))
+        self.kart_lay.addWidget(bilgi_karti("Denetim Log Kaydı", f"{self.tbl_log.rowCount()} İşlem", "📜", "#2563EB"))
+        self.kart_lay.addWidget(bilgi_karti("SHA-256 Log Zinciri", "Aktif & Korumalı ✔", "🛡️", "#15803D"))
 
     def param_degistir(self, anahtar: str, mevcut: str):
         yeni, ok = QInputDialog.getText(self, "Parametre Güncelle", f"'{anahtar}' için yeni değer:", text=mevcut)
@@ -419,17 +438,17 @@ class YoneticiPaneli(QWidget):
             self.db.calistir("SELECT fn_parametre_guncelle(%s, %s)", (anahtar, yeni))
             self.yenile()
         except Exception as e:
-            QMessageBox.warning(self, "Hata", hata_coz(e))
+            hata_goster(self, "Hata", e)
 
     def zincir_dogrula(self):
         try:
             bozuk = self.db.sorgula("SELECT * FROM fn_denetim_dogrula()")
             if not bozuk:
                 QMessageBox.information(
-                    self, "Zincir Sağlam ✓",
+                    self, "Zincir Sağlam ✔",
                     "Tüm denetim_log satırlarının SHA-256 özet zinciri doğrulandı.\nHiçbir kırılma veya müdahale tespit edilmedi."
                 )
             else:
                 QMessageBox.critical(self, "Zincir Kırık!", f"Bozulan log satırları: {bozuk}")
         except Exception as e:
-            QMessageBox.warning(self, "Hata", hata_coz(e))
+            hata_goster(self, "Hata", e)

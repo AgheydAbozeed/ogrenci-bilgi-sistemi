@@ -5,7 +5,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QBrush
-from app.db import Veritabani, hata_coz
+from app.db import Veritabani, hata_goster
+from app.stil import OLCULER, aktif_palet
 from app.ekranlar.ogrenci_ana import bilgi_karti
 
 
@@ -22,7 +23,7 @@ class DanismanOnayKuyrugu(QWidget):
         baslik.setObjectName("SayfaBaslik")
         ust.addWidget(baslik)
         ust.addStretch()
-        btn_yenile = QPushButton("Listeyi Yenile")
+        btn_yenile = QPushButton("↻  Listeyi Yenile (F5)")
         btn_yenile.setObjectName("IkincilBtn")
         btn_yenile.clicked.connect(self.yenile)
         ust.addWidget(btn_yenile)
@@ -43,6 +44,7 @@ class DanismanOnayKuyrugu(QWidget):
             ["Kayıt #", "Öğrenci No", "Ad Soyad", "Ders", "AKTS", "GNO", "Karar İşlemi"]
         )
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         k_lay.addWidget(self.tbl, 1)
         self.lay.addWidget(kutu, 1)
@@ -58,9 +60,9 @@ class DanismanOnayKuyrugu(QWidget):
         danisan_sayisi = len(self.db.sorgula("SELECT 1 FROM v_danisanlarim"))
         toplam_akts = sum(int(r["akts"] or 0) for r in kuyruk)
 
-        self.kart_lay.addWidget(bilgi_karti("Bekleyen Onay Talebi", f"{len(kuyruk)} Kayıt", "⏳", "#d97706"))
-        self.kart_lay.addWidget(bilgi_karti("Onay Bekleyen AKTS", f"{toplam_akts} AKTS", "±÷", "#1d70db"))
-        self.kart_lay.addWidget(bilgi_karti("Aktif Danışan Öğrenci", f"{danisan_sayisi} Öğrenci", "👥", "#16a34a"))
+        self.kart_lay.addWidget(bilgi_karti("Bekleyen Onay Talebi", f"{len(kuyruk)} Kayıt", "⏳", "#92400E"))
+        self.kart_lay.addWidget(bilgi_karti("Onay Bekleyen AKTS", f"{toplam_akts} AKTS", "±÷", "#2563EB"))
+        self.kart_lay.addWidget(bilgi_karti("Aktif Danışan Öğrenci", f"{danisan_sayisi} Öğrenci", "👥", "#15803D"))
 
         self.tbl.setRowCount(0)
         for r in kuyruk:
@@ -78,10 +80,10 @@ class DanismanOnayKuyrugu(QWidget):
             h.setContentsMargins(4, 2, 4, 2)
             h.setSpacing(6)
             kid = r["kayit_id"]
-            btn_onay = QPushButton("Onayla")
+            btn_onay = QPushButton("✔ Onayla")
             btn_onay.setObjectName("BirincilBtn")
             btn_onay.clicked.connect(lambda _, x=kid: self.karar_ver(x, "onay"))
-            btn_ret = QPushButton("Reddet")
+            btn_ret = QPushButton("✖ Reddet")
             btn_ret.setObjectName("TehlikeBtn")
             btn_ret.clicked.connect(lambda _, x=kid: self.karar_ver(x, "ret"))
             h.addWidget(btn_onay)
@@ -99,7 +101,7 @@ class DanismanOnayKuyrugu(QWidget):
             self.db.calistir("SELECT fn_danisman_karar_ben(%s, %s, %s)", (kayit_id, karar, gerekce))
             self.yenile()
         except Exception as e:
-            QMessageBox.warning(self, "İşlem Engeli", hata_coz(e))
+            hata_goster(self, "İşlem Engeli", e)
 
 
 class DanismanRiskPaneli(QWidget):
@@ -121,7 +123,7 @@ class DanismanRiskPaneli(QWidget):
         btn_ml.clicked.connect(self.ml_yeniden_hesapla)
         ust.addWidget(btn_ml)
 
-        btn_yenile = QPushButton("Yenile")
+        btn_yenile = QPushButton("↻  Yenile (F5)")
         btn_yenile.setObjectName("IkincilBtn")
         btn_yenile.clicked.connect(self.yenile)
         ust.addWidget(btn_yenile)
@@ -132,9 +134,8 @@ class DanismanRiskPaneli(QWidget):
         self.lay.addLayout(self.kart_lay)
 
         self.lbl_ml_detay = QLabel("Öğrenci seçildiğinde ML özellik vektörü ve model bilgisi burada gösterilir.")
-        self.lbl_ml_detay.setStyleSheet(
-            "background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; color: #1e293b;"
-        )
+        self.lbl_ml_detay.setObjectName("PortalKart")
+        self.lbl_ml_detay.setStyleSheet("padding: 8px 12px;")
         self.lay.addWidget(self.lbl_ml_detay)
 
         splitter = QSplitter(Qt.Vertical)
@@ -149,6 +150,7 @@ class DanismanRiskPaneli(QWidget):
             ["Öğrenci No", "Ad Soyad", "GNO", "Geçilen AKTS", "Kural Bayrakları", "YZ (ML) Risk Skoru"]
         )
         self.tbl_danisan.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_danisan.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_danisan.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tbl_danisan.setSelectionBehavior(QTableWidget.SelectRows)
         self.tbl_danisan.itemSelectionChanged.connect(self.ogrenci_secildi)
@@ -168,6 +170,7 @@ class DanismanRiskPaneli(QWidget):
         self.tbl_bayrak = QTableWidget(0, 3)
         self.tbl_bayrak.setHorizontalHeaderLabels(["Kural Kodu", "Açıklama", "Şiddet (1-3)"])
         self.tbl_bayrak.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_bayrak.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_bayrak.setEditTriggers(QTableWidget.NoEditTriggers)
         v_bayrak.addWidget(self.tbl_bayrak)
         l_alt.addWidget(k_bayrak, 1)
@@ -180,6 +183,7 @@ class DanismanRiskPaneli(QWidget):
         self.tbl_mez = QTableWidget(0, 4)
         self.tbl_mez.setHorizontalHeaderLabels(["Grup", "Tür", "AKTS (Sayılan/Min)", "Durum / Eksik"])
         self.tbl_mez.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_mez.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_mez.setEditTriggers(QTableWidget.NoEditTriggers)
         v_mez.addWidget(self.tbl_mez)
         l_alt.addWidget(k_mez, 1)
@@ -196,14 +200,14 @@ class DanismanRiskPaneli(QWidget):
             self.yenile()
             m = ozet["metrikler"]
             QMessageBox.information(
-                self, "YZ Risk Modeli Güncellendi ✓",
+                self, "YZ Risk Modeli Güncellendi ✔",
                 f"Seçilen Model: {ozet['secilen_model']}\n"
                 f"ROC-AUC: {m['roc_auc']}  |  F1: {m['f1']}  |  Brier: {m['brier']}\n\n"
                 f"Üretilen Kural Bayrağı: {ozet['bayrak_sayisi']}\n"
                 f"Skorlanan Öğrenci Sayısı: {ozet['tahmin_sayisi']}"
             )
         except Exception as e:
-            QMessageBox.warning(self, "ML Hesaplama Hatası", str(e))
+            hata_goster(self, "ML Hesaplama Hatası", e)
 
     def yenile(self):
         while self.kart_lay.count():
@@ -215,9 +219,9 @@ class DanismanRiskPaneli(QWidget):
         yuksek_risk = sum(1 for d in self.danisanlar if d["en_yuksek_siddet"] >= 3 or (d.get("risk_skoru") and float(d["risk_skoru"]) >= 0.65))
         toplam_bayrak = sum(int(d["bayrak_sayisi"] or 0) for d in self.danisanlar)
 
-        self.kart_lay.addWidget(bilgi_karti("Toplam Danışan", f"{len(self.danisanlar)} Öğrenci", "👥", "#1d70db"))
-        self.kart_lay.addWidget(bilgi_karti("Yüksek Riskli Öğrenci", f"{yuksek_risk} Öğrenci", "⚠️", "#dc2626"))
-        self.kart_lay.addWidget(bilgi_karti("Aktif Risk Bayrağı", f"{toplam_bayrak} Bayrak", "🚩", "#d97706"))
+        self.kart_lay.addWidget(bilgi_karti("Toplam Danışan", f"{len(self.danisanlar)} Öğrenci", "👥", "#2563EB"))
+        self.kart_lay.addWidget(bilgi_karti("Yüksek Riskli Öğrenci", f"{yuksek_risk} Öğrenci", "⚠️", "#B91C1C"))
+        self.kart_lay.addWidget(bilgi_karti("Aktif Risk Bayrağı", f"{toplam_bayrak} Bayrak", "🚩", "#92400E"))
 
         self.tbl_danisan.setRowCount(0)
         for d in self.danisanlar:
@@ -230,21 +234,25 @@ class DanismanRiskPaneli(QWidget):
 
             b_item = QTableWidgetItem(f"{d['bayrak_sayisi']} Bayrak (Max Şiddet: {d['en_yuksek_siddet']})")
             if d["en_yuksek_siddet"] >= 3:
-                b_item.setBackground(QBrush(QColor("#fee2e2")))
+                b_item.setBackground(QBrush(QColor("#FEE2E2")))
+                b_item.setForeground(QBrush(QColor("#B91C1C")))
             elif d["en_yuksek_siddet"] >= 1:
-                b_item.setBackground(QBrush(QColor("#fef3c7")))
+                b_item.setBackground(QBrush(QColor("#FEF3C7")))
+                b_item.setForeground(QBrush(QColor("#92400E")))
             else:
-                b_item.setBackground(QBrush(QColor("#dcfce7")))
+                b_item.setBackground(QBrush(QColor("#DCFCE7")))
+                b_item.setForeground(QBrush(QColor("#15803D")))
             self.tbl_danisan.setItem(r, 4, b_item)
 
             skor = d.get("risk_skoru")
             if skor is not None:
                 s_val = float(skor)
-                seviye = "Yüksek Risk" if s_val >= 0.65 else ("Orta Risk" if s_val >= 0.35 else "Düşük Risk")
+                seviye = "✖ Yüksek Risk" if s_val >= 0.65 else ("⏳ Orta Risk" if s_val >= 0.35 else "✔ Düşük Risk")
                 s_item = QTableWidgetItem(f"{s_val:.3f} ({seviye})")
-                s_item.setBackground(QBrush(QColor(
-                    "#fee2e2" if s_val >= 0.65 else ("#fef3c7" if s_val >= 0.35 else "#dcfce7")
-                )))
+                bg = "#FEE2E2" if s_val >= 0.65 else ("#FEF3C7" if s_val >= 0.35 else "#DCFCE7")
+                fg = "#B91C1C" if s_val >= 0.65 else ("#92400E" if s_val >= 0.35 else "#15803D")
+                s_item.setBackground(QBrush(QColor(bg)))
+                s_item.setForeground(QBrush(QColor(fg)))
             else:
                 s_item = QTableWidgetItem("Hesaplanmadı")
             self.tbl_danisan.setItem(r, 5, s_item)
@@ -293,5 +301,5 @@ class DanismanRiskPaneli(QWidget):
             self.tbl_mez.setItem(r, 0, QTableWidgetItem(str(m["grup_ad"])))
             self.tbl_mez.setItem(r, 1, QTableWidgetItem(str(m["tur"])))
             self.tbl_mez.setItem(r, 2, QTableWidgetItem(f"{m['sayilan_akts']} / {m['min_akts']}"))
-            durum_str = "Tamam ✓" if m["durum"] == "tamam" else f"Eksik: {m.get('eksik') or ''}"
+            durum_str = "✔ Tamam" if m["durum"] == "tamam" else f"✖ Eksik: {m.get('eksik') or ''}"
             self.tbl_mez.setItem(r, 3, QTableWidgetItem(durum_str))

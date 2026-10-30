@@ -1,13 +1,433 @@
-from app.ekranlar.db_rontgen_ve_acid import AcidDeneGeriAlDialog
+import os
+import subprocess
+from datetime import datetime
+from collections import OrderedDict
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QFrame,
     QTableWidget, QTableWidgetItem, QPushButton, QHeaderView,
-    QComboBox, QSpinBox, QLineEdit, QMessageBox, QSplitter
+    QComboBox, QLineEdit, QMessageBox, QSplitter, QTabWidget,
+    QGraphicsView, QGraphicsScene, QGraphicsRectItem
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QBrush
-from app.db import Veritabani, hata_coz
+from PySide6.QtCore import Qt, QMarginsF, QSizeF, QPointF
+from PySide6.QtGui import (
+    QColor, QBrush, QPen, QFont, QPainter, QPolygonF,
+    QTextDocument, QPdfWriter, QPageSize
+)
+from app.db import Veritabani, hata_coz, hata_goster, HATA_SABLONLARI
+from app.stil import OLCULER, aktif_palet, rozet_formatla
 from app.ekranlar.ogrenci_ana import bilgi_karti
+from app.ekranlar.db_rontgen_ve_acid import AcidDeneGeriAlDialog
+
+
+class DersDugumuItem(QGraphicsRectItem):
+    """
+    Önkoşul Haritası (QGraphicsScene) üzerindeki 120×44 px ders düğümü.
+    Tıklanınca eksik önkoşul zincirini vurgular.
+    """
+
+    def __init__(self, ders_id: int, kod: str, ad: str, durum: str, x: float, y: float, tiklama_cb):
+        super().__init__(0, 0, 120, 44)
+        self.setPos(x, y)
+        self.ders_id = ders_id
+        self.kod = kod
+        self.ad = ad
+        self.durum = durum  # 'gecildi', 'alinabilir', 'kilitli'
+        self.tiklama_cb = tiklama_cb
+        self.vurgulu = False
+        self.secili = False
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(f"{kod} — {ad}\nDurum: {durum.upper()}\n(Eksik önkoşul zincirini görmek için tıklayın)")
+
+    def paint(self, painter: QPainter, option, widget=None):
+        painter.setRenderHint(QPainter.Antialiasing)
+        r = self.rect()
+
+        # Renk kuralı: Geçilen yeşil, alınabilir mavi çerçeve, kilitli gri; vurguluysa kırmızı çerçeve
+        if self.vurgulu:
+            bg = QColor("#FEE2E2")
+            border = QColor("#B91C1C")
+            fg = QColor("#B91C1C")
+            kalinlik = 3.0
+            ikon = "🔒"
+        elif self.durum == "gecildi":
+            bg = QColor("#DCFCE7")
+            border = QColor("#15803D")
+            fg = QColor("#15803D")
+            kalinlik = 2.0
+            ikon = "✔"
+        elif self.durum == "alinabilir":
+            bg = QColor("#FFFFFF")
+            border = QColor("#2563EB")
+            fg = QColor("#2563EB")
+            kalinlik = 2.5
+            ikon = "○"
+        else:
+            bg = QColor("#F1F5F9")
+            border = QColor("#94A3B8")
+            fg = QColor("#475569")
+            kalinlik = 1.5
+            ikon = "🔒"
+
+        if self.secili:
+            kalinlik = 3.5
+
+        painter.setBrush(QBrush(bg))
+        painter.setPen(QPen(border, kalinlik))
+        painter.drawRoundedRect(r, 8, 8)
+
+        # Üst satır: İkon + Ders Kodu
+        f_kod = QFont()
+        f_kod.setPointSize(9)
+        f_kod.setBold(True)
+        painter.setFont(f_kod)
+        painter.setPen(fg)
+        painter.drawText(r.adjusted(6, 4, -6, -20), Qt.AlignCenter, f"{ikon} {self.kod}")
+
+        # Alt satır: Kısaltılmış Ders Adı
+        f_ad = QFont()
+        f_ad.setPointSize(7)
+        painter.setFont(f_ad)
+        painter.setPen(QColor("#334155") if self.durum != "kilitli" else QColor("#64748B"))
+        kisa_ad = self.ad if len(self.ad) <= 18 else self.ad[:16] + "…"
+        painter.drawText(r.adjusted(4, 22, -4, -4), Qt.AlignCenter, kisa_ad)
+
+    def mousePressEvent(self, event):
+        if self.tiklama_cb:
+            self.tiklama_cb(self.ders_id)
+        super().mousePressEvent(event)
+
+
+class OnkosulHaritasiWidget(QWidget):
+    """
+    Tasarım Sistemi — Önkoşul Haritası:
+    - Çizim: QGraphicsScene; sütun = önkoşul zincirindeki sıra.
+    - Düğüm ölçüleri: 120×44 px, yatay boşluk 80 px, dikey boşluk 28 px.
+    - Renkler: Geçilen yeşil, alınabilir mavi çerçeve, kilitli gri.
+    - Etkileşim: Tıklayınca eksik önkoşul zinciri vurgulanır; kritik yol kalın çizgi.
+    """
+
+    DUGUM_GEN = 120
+    DUGUM_YUK = 44
+    YATAY_BOSLUK = 80
+    DIKEY_BOSLUK = 28
+
+    def __init__(self, db: Veritabani):
+        super().__init__()
+        self.db = db
+        self.dersler: dict[int, dict] = {}
+        self.onkosullar: list[dict] = []
+        self.dugum_itemler: dict[int, DersDugumuItem] = {}
+        self.kritik_kenarlar: set[tuple[int, int]] = set()
+        self.secili_ders_id: int | None = None
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(10, 10, 10, 10)
+        lay.setSpacing(8)
+
+        # Üst lejant ve açıklama
+        ust = QHBoxLayout()
+        for bg, border, fg, metin in [
+            ("#DCFCE7", "#15803D", "#15803D", "✔ Geçilen (Yeşil)"),
+            ("#FFFFFF", "#2563EB", "#2563EB", "○ Alınabilir (Mavi Çerçeve)"),
+            ("#F1F5F9", "#94A3B8", "#475569", "🔒 Kilitli (Gri)"),
+            ("#FEE2E2", "#B91C1C", "#B91C1C", "⚡ Eksik Önkoşul Zinciri (Tıklayınca)"),
+        ]:
+            lbl = QLabel(metin)
+            lbl.setStyleSheet(
+                f"background:{bg}; color:{fg}; border:2px solid {border}; "
+                "border-radius:6px; padding:3px 10px; font-weight:700; font-size:9pt;"
+            )
+            ust.addWidget(lbl)
+
+        lbl_kritik = QLabel("━━ Kritik Yol (Kalın Çizgi)")
+        lbl_kritik.setStyleSheet("color:#12355B; font-weight:800; font-size:9pt; padding-left:8px;")
+        ust.addWidget(lbl_kritik)
+        ust.addStretch()
+
+        btn_sifirla = QPushButton("Vurguyu Temizle")
+        btn_sifirla.setObjectName("IkincilBtn")
+        btn_sifirla.clicked.connect(lambda: self.dugum_tiklandi(None))
+        ust.addWidget(btn_sifirla)
+        lay.addLayout(ust)
+
+        self.scene = QGraphicsScene(self)
+        self.view = QGraphicsView(self.scene)
+        self.view.setRenderHints(QPainter.Antialiasing | QPainter.TextAntialiasing)
+        self.view.setMinimumHeight(290)
+        lay.addWidget(self.view, 1)
+
+        self.lbl_etkilesim = QLabel(
+            "💡 Bir ders düğümüne tıkladığınızda eksik önkoşul zinciri grafikte vurgulanır ve kullanıcı dilinde açıklanır."
+        )
+        self.lbl_etkilesim.setStyleSheet(
+            "background-color: #EFF6FF; color: #1E3A8A; border: 1px solid #BFDBFE; "
+            "border-radius: 6px; padding: 8px 12px; font-weight: 600;"
+        )
+        lay.addWidget(self.lbl_etkilesim)
+
+    def yukle(self):
+        ders_satirlari = self.db.sorgula(
+            """SELECT d.ders_id, d.kod, d.ad, d.akts, md.donem_no, md.tur
+                 FROM ogrenci o
+                 JOIN mufredat_ders md ON md.mufredat_id = o.mufredat_id
+                 JOIN ders d ON d.ders_id = md.ders_id
+                WHERE o.kisi_id = fn_oturum_kisi_id()
+                ORDER BY md.donem_no, d.kod"""
+        )
+        onkosul_satirlari = self.db.sorgula(
+            """SELECT ok.ders_id, ok.onkosul_ders_id, ok.min_harf,
+                      d_onk.kod AS onkosul_kod, h.katsayi AS min_katsayi
+                 FROM onkosul ok
+                 JOIN ders d_onk ON d_onk.ders_id = ok.onkosul_ders_id
+                 JOIN harf_notu_aralik h ON h.harf = ok.min_harf"""
+        )
+        transkript = self.db.sorgula("SELECT * FROM v_transkript")
+
+        gecilen_katsayi: dict[str, float] = {}
+        for t in transkript:
+            if t.get("durum") == "gecti":
+                kod = t.get("kod") or t.get("ders_kodu")
+                kat = float(t.get("katsayi") or 2.0)
+                gecilen_katsayi[kod] = max(gecilen_katsayi.get(kod, 0.0), kat)
+
+        self.dersler = {d["ders_id"]: dict(d) for d in ders_satirlari}
+        self.onkosullar = [
+            o for o in onkosul_satirlari
+            if o["ders_id"] in self.dersler and o["onkosul_ders_id"] in self.dersler
+        ]
+
+        # Önkoşul haritası: her dersin önkoşulları
+        onk_map: dict[int, list[dict]] = {did: [] for did in self.dersler}
+        ardil_map: dict[int, list[int]] = {did: [] for did in self.dersler}
+        for o in self.onkosullar:
+            onk_map[o["ders_id"]].append(o)
+            ardil_map[o["onkosul_ders_id"]].append(o["ders_id"])
+
+        # Her dersin durumunu ('gecildi', 'alinabilir', 'kilitli') belirle
+        for did, d in self.dersler.items():
+            kod = d["kod"]
+            if kod in gecilen_katsayi:
+                d["durum"] = "gecildi"
+            else:
+                eksik_var = False
+                for o in onk_map[did]:
+                    onk_kod = o["onkosul_kod"]
+                    min_k = float(o["min_katsayi"] or 1.0)
+                    if onk_kod not in gecilen_katsayi or gecilen_katsayi[onk_kod] < min_k:
+                        eksik_var = True
+                        break
+                d["durum"] = "kilitli" if eksik_var else "alinabilir"
+
+        # Sütun = önkoşul zincirindeki sıra (0, 1, 2, ...)
+        zincir_sira: dict[int, int] = {}
+
+        def sira_hesapla(did: int, ziyaret: set[int]) -> int:
+            if did in zincir_sira:
+                return zincir_sira[did]
+            if did in ziyaret:
+                return 0
+            ziyaret.add(did)
+            onler = onk_map.get(did, [])
+            if not onler:
+                zincir_sira[did] = 0
+            else:
+                zincir_sira[did] = 1 + max(sira_hesapla(o["onkosul_ders_id"], ziyaret) for o in onler)
+            return zincir_sira[did]
+
+        for did in self.dersler:
+            sira_hesapla(did, set())
+
+        # Kritik yol (en uzun önkoşul zinciri) hesaplama
+        ileri_uzunluk: dict[int, int] = {}
+        ileri_secim: dict[int, int | None] = {}
+
+        def ileri_hesapla(did: int, ziyaret: set[int]) -> int:
+            if did in ileri_uzunluk:
+                return ileri_uzunluk[did]
+            if did in ziyaret:
+                return 1
+            ziyaret.add(did)
+            ardillar = ardil_map.get(did, [])
+            if not ardillar:
+                ileri_uzunluk[did] = 1
+                ileri_secim[did] = None
+            else:
+                en_iyi_ardil = max(ardillar, key=lambda a: ileri_hesapla(a, set(ziyaret)))
+                ileri_uzunluk[did] = 1 + ileri_hesapla(en_iyi_ardil, set(ziyaret))
+                ileri_secim[did] = en_iyi_ardil
+            return ileri_uzunluk[did]
+
+        for did in self.dersler:
+            ileri_hesapla(did, set())
+
+        self.kritik_kenarlar.clear()
+        if ileri_uzunluk:
+            max_uz = max(ileri_uzunluk.values())
+            if max_uz > 1:
+                for bas_id, uz in ileri_uzunluk.items():
+                    if uz == max_uz and zincir_sira.get(bas_id, 0) == 0:
+                        cur = bas_id
+                        while ileri_secim.get(cur) is not None:
+                            nxt = ileri_secim[cur]
+                            self.kritik_kenarlar.add((cur, nxt))
+                            cur = nxt
+
+        # Sütunlara göre düğüm konumlarını ata (120×44 px, yatay 80 px, dikey 28 px)
+        sutun_gruplari: dict[int, list[int]] = {}
+        for did, sira in zincir_sira.items():
+            sutun_gruplari.setdefault(sira, []).append(did)
+
+        self.konumlar: dict[int, tuple[float, float]] = {}
+        adim_x = self.DUGUM_GEN + self.YATAY_BOSLUK  # 120 + 80 = 200 px
+        adim_y = self.DUGUM_YUK + self.DIKEY_BOSLUK  # 44 + 28 = 72 px
+
+        for sira in sorted(sutun_gruplari.keys()):
+            d_list = sorted(sutun_gruplari[sira], key=lambda x: self.dersler[x]["kod"])
+            for idx, did in enumerate(d_list):
+                x = 30 + sira * adim_x
+                y = 44 + idx * adim_y
+                self.konumlar[did] = (x, y)
+
+        self.onk_map = onk_map
+        self.gecilen_katsayi = gecilen_katsayi
+        self._sahneyi_ciz(vurgulu_dugumler=set(), vurgulu_kenarlar=set())
+
+    def _eksik_zincir_bul(self, hedef_id: int) -> tuple[set[int], set[tuple[int, int]], list[str]]:
+        dugumler: set[int] = set()
+        kenarlar: set[tuple[int, int]] = set()
+        mesajlar: list[str] = []
+
+        def gez(did: int, ziyaret: set[int]):
+            if did in ziyaret:
+                return
+            ziyaret.add(did)
+            ders_kod = self.dersler[did]["kod"]
+            for o in self.onk_map.get(did, []):
+                onk_id = o["onkosul_ders_id"]
+                onk_kod = o["onkosul_kod"]
+                min_harf = o["min_harf"]
+                min_k = float(o["min_katsayi"] or 1.0)
+                if onk_kod not in self.gecilen_katsayi or self.gecilen_katsayi[onk_kod] < min_k:
+                    dugumler.add(onk_id)
+                    dugumler.add(did)
+                    kenarlar.add((onk_id, did))
+                    m_str = HATA_SABLONLARI["ONKOSUL_EKSIK"].format(
+                        ders=ders_kod, onkosul=onk_kod, harf=min_harf
+                    )
+                    if m_str not in mesajlar:
+                        mesajlar.append(m_str)
+                    gez(onk_id, ziyaret)
+
+        gez(hedef_id, set())
+        return dugumler, kenarlar, mesajlar
+
+    def dugum_tiklandi(self, ders_id: int | None):
+        self.secili_ders_id = ders_id
+        if ders_id is None or ders_id not in self.dersler:
+            self.lbl_etkilesim.setText(
+                "💡 Bir ders düğümüne tıkladığınızda eksik önkoşul zinciri grafikte vurgulanır ve kullanıcı dilinde açıklanır."
+            )
+            self.lbl_etkilesim.setStyleSheet(
+                "background-color: #EFF6FF; color: #1E3A8A; border: 1px solid #BFDBFE; "
+                "border-radius: 6px; padding: 8px 12px; font-weight: 600;"
+            )
+            self._sahneyi_ciz(set(), set())
+            return
+
+        d = self.dersler[ders_id]
+        v_dugumler, v_kenarlar, mesajlar = self._eksik_zincir_bul(ders_id)
+        if mesajlar:
+            self.lbl_etkilesim.setText("🔒  " + "  |  ".join(mesajlar))
+            self.lbl_etkilesim.setStyleSheet(
+                "background-color: #FEE2E2; color: #B91C1C; border: 1px solid #FCA5A5; "
+                "border-radius: 6px; padding: 8px 12px; font-weight: 700;"
+            )
+        elif d["durum"] == "gecildi":
+            self.lbl_etkilesim.setText(f"✔  {d['kod']} ({d['ad']}) dersi başarıyla geçilmiş.")
+            self.lbl_etkilesim.setStyleSheet(
+                "background-color: #DCFCE7; color: #15803D; border: 1px solid #86EFAC; "
+                "border-radius: 6px; padding: 8px 12px; font-weight: 700;"
+            )
+        else:
+            self.lbl_etkilesim.setText(
+                f"○  {d['kod']} ({d['ad']}) dersinin tüm önkoşulları tamamlanmış; bu dönem alınabilir."
+            )
+            self.lbl_etkilesim.setStyleSheet(
+                "background-color: #DBEAFE; color: #2563EB; border: 1px solid #93C5FD; "
+                "border-radius: 6px; padding: 8px 12px; font-weight: 700;"
+            )
+        self._sahneyi_ciz(v_dugumler, v_kenarlar)
+
+    def _sahneyi_ciz(self, vurgulu_dugumler: set[int], vurgulu_kenarlar: set[tuple[int, int]]):
+        self.scene.clear()
+        self.dugum_itemler.clear()
+
+        # Sütun başlıklarını çiz
+        max_sira = 0
+        for did, (x, _) in self.konumlar.items():
+            sira = int(round((x - 30) / (self.DUGUM_GEN + self.YATAY_BOSLUK)))
+            max_sira = max(max_sira, sira)
+
+        for sira in range(max_sira + 1):
+            x = 30 + sira * (self.DUGUM_GEN + self.YATAY_BOSLUK)
+            baslik_item = self.scene.addText(f"{sira + 1}. Kademe (Zincir Sırası)")
+            f = QFont()
+            f.setPointSize(8)
+            f.setBold(True)
+            baslik_item.setFont(f)
+            baslik_item.setDefaultTextColor(QColor("#475569"))
+            baslik_item.setPos(x + 4, 10)
+
+        # Önce kenarları (okları) çiz
+        for o in self.onkosullar:
+            u = o["onkosul_ders_id"]
+            v = o["ders_id"]
+            if u not in self.konumlar or v not in self.konumlar:
+                continue
+            ux, uy = self.konumlar[u]
+            vx, vy = self.konumlar[v]
+            p1 = QPointF(ux + self.DUGUM_GEN, uy + self.DUGUM_YUK / 2)
+            p2 = QPointF(vx, vy + self.DUGUM_YUK / 2)
+
+            if (u, v) in vurgulu_kenarlar:
+                kalem = QPen(QColor("#B91C1C"), 3.5)
+                ok_renk = QColor("#B91C1C")
+            elif (u, v) in self.kritik_kenarlar:
+                # Kritik yol kalın çizgi
+                kalem = QPen(QColor("#12355B"), 3.2)
+                ok_renk = QColor("#12355B")
+            else:
+                kalem = QPen(QColor("#94A3B8"), 1.6)
+                ok_renk = QColor("#94A3B8")
+
+            self.scene.addLine(p1.x(), p1.y(), p2.x(), p2.y(), kalem)
+
+            # Ok ucu
+            ok = QPolygonF([
+                p2,
+                QPointF(p2.x() - 8, p2.y() - 4),
+                QPointF(p2.x() - 8, p2.y() + 4),
+            ])
+            self.scene.addPolygon(ok, QPen(ok_renk), QBrush(ok_renk))
+
+        # Düğümleri (120×44 px) çiz
+        for did, d in self.dersler.items():
+            x, y = self.konumlar[did]
+            item = DersDugumuItem(
+                ders_id=did,
+                kod=d["kod"],
+                ad=d["ad"],
+                durum=d["durum"],
+                x=x,
+                y=y,
+                tiklama_cb=self.dugum_tiklandi,
+            )
+            item.vurgulu = did in vurgulu_dugumler
+            item.secili = did == self.secili_ders_id
+            self.scene.addItem(item)
+            self.dugum_itemler[did] = item
+
+        self.scene.setSceneRect(self.scene.itemsBoundingRect().adjusted(-20, -15, 20, 20))
 
 
 class OgrenciKisiselVeTakvim(QWidget):
@@ -20,6 +440,7 @@ class OgrenciKisiselVeTakvim(QWidget):
         self.yenile()
 
     def yenile(self):
+        pal = aktif_palet()
         while self.lay.count():
             item = self.lay.takeAt(0)
             if item.widget():
@@ -64,7 +485,7 @@ class OgrenciKisiselVeTakvim(QWidget):
         k_lay = QVBoxLayout(k_kart)
         k_lay.setContentsMargins(18, 16, 18, 16)
         lbl_kb = QLabel("👤  Öğrenci Kimlik ve Bölüm Bilgileri")
-        lbl_kb.setStyleSheet("color: #093567; font-size: 14px; font-weight: 700;")
+        lbl_kb.setStyleSheet(f"color: {pal['vurgu']}; font-size: 12pt; font-weight: 700;")
         k_lay.addWidget(lbl_kb)
 
         satirlar_k = [
@@ -78,11 +499,11 @@ class OgrenciKisiselVeTakvim(QWidget):
         g1 = QGridLayout()
         g1.setSpacing(0)
         for i, (k, v) in enumerate(satirlar_k):
-            bg = "#f4f7fb" if i % 2 == 0 else "#ffffff"
+            bg = pal["zebra_zemin"] if i % 2 == 0 else pal["kart_zemin"]
             lk = QLabel(k)
-            lk.setStyleSheet(f"background:{bg}; color:#3b6998; font-weight:600; padding:7px 10px; border:1px solid #e5e9f0;")
+            lk.setStyleSheet(f"background:{bg}; color:{pal['ikincil_metin']}; font-weight:600; padding:7px 10px; border:1px solid {pal['kenarlik']};")
             lv = QLabel(v)
-            lv.setStyleSheet(f"background:{bg}; color:#1e293b; font-weight:600; padding:7px 10px; border:1px solid #e5e9f0;")
+            lv.setStyleSheet(f"background:{bg}; color:{pal['metin']}; font-weight:600; padding:7px 10px; border:1px solid {pal['kenarlik']};")
             g1.addWidget(lk, i, 0)
             g1.addWidget(lv, i, 1)
         k_lay.addLayout(g1)
@@ -93,7 +514,7 @@ class OgrenciKisiselVeTakvim(QWidget):
         d_lay = QVBoxLayout(d_kart)
         d_lay.setContentsMargins(18, 16, 18, 16)
         lbl_db = QLabel("💬  Akademik Danışman Bilgileri")
-        lbl_db.setStyleSheet("color: #7e22ce; font-size: 14px; font-weight: 700;")
+        lbl_db.setStyleSheet(f"color: {pal['vurgu']}; font-size: 12pt; font-weight: 700;")
         d_lay.addWidget(lbl_db)
 
         satirlar_d = [
@@ -106,11 +527,11 @@ class OgrenciKisiselVeTakvim(QWidget):
         g2 = QGridLayout()
         g2.setSpacing(0)
         for i, (k, v) in enumerate(satirlar_d):
-            bg = "#faf5ff" if i % 2 == 0 else "#ffffff"
+            bg = pal["zebra_zemin"] if i % 2 == 0 else pal["kart_zemin"]
             lk = QLabel(k)
-            lk.setStyleSheet(f"background:{bg}; color:#6b21a8; font-weight:600; padding:7px 10px; border:1px solid #e9d5ff;")
+            lk.setStyleSheet(f"background:{bg}; color:{pal['ikincil_metin']}; font-weight:600; padding:7px 10px; border:1px solid {pal['kenarlik']};")
             lv = QLabel(v)
-            lv.setStyleSheet(f"background:{bg}; color:#1e293b; font-weight:600; padding:7px 10px; border:1px solid #e9d5ff;")
+            lv.setStyleSheet(f"background:{bg}; color:{pal['metin']}; font-weight:600; padding:7px 10px; border:1px solid {pal['kenarlik']};")
             g2.addWidget(lk, i, 0)
             g2.addWidget(lv, i, 1)
         d_lay.addLayout(g2)
@@ -123,12 +544,13 @@ class OgrenciKisiselVeTakvim(QWidget):
         t_lay = QVBoxLayout(t_kart)
         t_lay.setContentsMargins(18, 14, 18, 16)
         lbl_tb = QLabel("📅  Akademik Dönem ve Kayıt / Ekle-Bırak Takvimi")
-        lbl_tb.setStyleSheet("color: #d97706; font-size: 14px; font-weight: 700;")
+        lbl_tb.setStyleSheet(f"color: {pal['vurgu']}; font-size: 12pt; font-weight: 700;")
         t_lay.addWidget(lbl_tb)
 
         tbl = QTableWidget(0, 5)
         tbl.setHorizontalHeaderLabels(["Yıl", "Dönem", "Kayıt Başlangıç", "Kayıt Bitiş", "Ekle-Bırak Bitiş"])
         tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        tbl.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         tbl.setEditTriggers(QTableWidget.NoEditTriggers)
 
         for r in self.db.sorgula("SELECT yil, tur, kayit_baslangic, kayit_bitis, ekle_birak_bitis FROM donem ORDER BY yil DESC, donem_id DESC"):
@@ -156,7 +578,7 @@ class OgrenciNotlarTranskript(QWidget):
         baslik.setObjectName("SayfaBaslik")
         ust.addWidget(baslik)
         ust.addStretch()
-        btn_yenile = QPushButton("Yenile")
+        btn_yenile = QPushButton("↻  Yenile (F5)")
         btn_yenile.setObjectName("IkincilBtn")
         btn_yenile.clicked.connect(self.yenile)
         ust.addWidget(btn_yenile)
@@ -176,6 +598,7 @@ class OgrenciNotlarTranskript(QWidget):
         self.tbl_notlar = QTableWidget(0, 5)
         self.tbl_notlar.setHorizontalHeaderLabels(["Kayıt #", "Ders Kodu", "Bileşen", "Ağırlık (%)", "Puan"])
         self.tbl_notlar.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_notlar.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_notlar.setEditTriggers(QTableWidget.NoEditTriggers)
         l_not.addWidget(self.tbl_notlar)
         splitter.addWidget(w_not)
@@ -188,6 +611,7 @@ class OgrenciNotlarTranskript(QWidget):
         self.tbl_tr = QTableWidget(0, 7)
         self.tbl_tr.setHorizontalHeaderLabels(["Yıl", "Dönem", "Ders Kodu", "Ders Adı", "AKTS", "Harf Notu", "Durum"])
         self.tbl_tr.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_tr.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_tr.setEditTriggers(QTableWidget.NoEditTriggers)
         l_tr.addWidget(self.tbl_tr)
         splitter.addWidget(w_tr)
@@ -205,7 +629,7 @@ class OgrenciNotlarTranskript(QWidget):
         b_lay.addWidget(btn_uret)
 
         self.lbl_kod = QLabel("Doğrulama Kodu: -")
-        self.lbl_kod.setStyleSheet("font-weight: 700; color: #093567;")
+        self.lbl_kod.setStyleSheet("font-weight: 700; color: #2563EB;")
         b_lay.addWidget(self.lbl_kod)
         b_lay.addStretch()
 
@@ -237,10 +661,10 @@ class OgrenciNotlarTranskript(QWidget):
         notlar = self.db.sorgula("SELECT * FROM v_not_detay ORDER BY kayit_id DESC, bilesen")
         tr = self.db.sorgula("SELECT * FROM v_transkript ORDER BY yil, donem, kod")
 
-        self.kart_lay.addWidget(bilgi_karti("Genel Not Ortalaması", str(ozet.get("gno") or "-"), "A+", "#1d70db"))
-        self.kart_lay.addWidget(bilgi_karti("Dönem Not Ortalaması", str(ozet.get("dno") or "-"), "📊", "#0d9488"))
-        self.kart_lay.addWidget(bilgi_karti("Geçilen Toplam AKTS", f"{ozet.get('gecilen_akts', 0)} AKTS", "±÷", "#16a34a"))
-        self.kart_lay.addWidget(bilgi_karti("Transkript Ders Sayısı", f"{len(tr)} Ders", "📚", "#7e22ce"))
+        self.kart_lay.addWidget(bilgi_karti("Genel Not Ortalaması", str(ozet.get("gno") or "-"), "A+", "#2563EB"))
+        self.kart_lay.addWidget(bilgi_karti("Dönem Not Ortalaması", str(ozet.get("dno") or "-"), "📊", "#2563EB"))
+        self.kart_lay.addWidget(bilgi_karti("Geçilen Toplam AKTS", f"{ozet.get('gecilen_akts', 0)} AKTS", "±÷", "#15803D"))
+        self.kart_lay.addWidget(bilgi_karti("Transkript Ders Sayısı", f"{len(tr)} Ders", "📚", "#2563EB"))
 
         self.tbl_notlar.setRowCount(0)
         for r in notlar:
@@ -263,15 +687,18 @@ class OgrenciNotlarTranskript(QWidget):
             self.tbl_tr.setItem(row, 4, QTableWidgetItem(str(r["akts"])))
 
             harf_item = QTableWidgetItem(str(r["harf"]))
-            durum_item = QTableWidgetItem(str(r["durum"]))
+            durum_str = "✔ Geçti" if r["durum"] == "gecti" else ("✖ Kaldı" if r["durum"] == "kaldi" else str(r["durum"]))
+            durum_item = QTableWidgetItem(durum_str)
             if r["durum"] == "gecti":
-                harf_item.setBackground(QBrush(QColor("#dcfce7")))
-                harf_item.setForeground(QBrush(QColor("#166534")))
-                durum_item.setBackground(QBrush(QColor("#dcfce7")))
+                harf_item.setBackground(QBrush(QColor("#DCFCE7")))
+                harf_item.setForeground(QBrush(QColor("#15803D")))
+                durum_item.setBackground(QBrush(QColor("#DCFCE7")))
+                durum_item.setForeground(QBrush(QColor("#15803D")))
             elif r["durum"] == "kaldi":
-                harf_item.setBackground(QBrush(QColor("#fee2e2")))
-                harf_item.setForeground(QBrush(QColor("#991b1b")))
-                durum_item.setBackground(QBrush(QColor("#fee2e2")))
+                harf_item.setBackground(QBrush(QColor("#FEE2E2")))
+                harf_item.setForeground(QBrush(QColor("#B91C1C")))
+                durum_item.setBackground(QBrush(QColor("#FEE2E2")))
+                durum_item.setForeground(QBrush(QColor("#B91C1C")))
             self.tbl_tr.setItem(row, 5, harf_item)
             self.tbl_tr.setItem(row, 6, durum_item)
 
@@ -283,7 +710,7 @@ class OgrenciNotlarTranskript(QWidget):
             self.txt_dogrula.setText(kod)
             QMessageBox.information(self, "Belge Üretildi", f"SHA-256 imzalı belge üretildi.\nDoğrulama Kodu: {kod}")
         except Exception as e:
-            QMessageBox.warning(self, "Hata", hata_coz(e))
+            hata_goster(self, "Hata", e)
 
     def belge_dogrula(self):
         kod = self.txt_dogrula.text().strip()
@@ -295,27 +722,19 @@ class OgrenciNotlarTranskript(QWidget):
                 QMessageBox.warning(self, "Geçersiz Kod", "Bu doğrulama koduna ait belge bulunamadı.")
             elif r.get("gecerli"):
                 QMessageBox.information(
-                    self, "Belge Geçerli ✓",
+                    self, "Belge Geçerli ✔",
                     f"Öğrenci No: {r['ogrenci_no']}\nBelge Türü: {r['tur']}\n"
                     f"Üretim Zamanı: {r['uretim_zamani']}\n\nSHA-256 İçerik Özeti güncel transkript ile EŞLEŞİYOR."
                 )
             else:
                 QMessageBox.critical(
-                    self, "Bütünlük Bozulmuş ✗",
+                    self, "Bütünlük Bozulmuş ✖",
                     f"Öğrenci No: {r['ogrenci_no']}\nBelge üretildikten sonra transkript notları değişmiş!"
                 )
         except Exception as e:
-            QMessageBox.warning(self, "Hata", hata_coz(e))
-
-
+            hata_goster(self, "Hata", e)
 
     def transkript_indir(self):
-        import os, subprocess
-        from datetime import datetime
-        from collections import OrderedDict
-        from PySide6.QtGui import QTextDocument, QPdfWriter, QPageSize
-        from PySide6.QtCore import QMarginsF, QSizeF
-
         kod = self.txt_dogrula.text().strip()
         if not kod:
             try:
@@ -460,15 +879,15 @@ class OgrenciNotlarTranskript(QWidget):
         <style>
             body {{ font-family: Arial, Helvetica, sans-serif; color: #111111; margin: 0; padding: 0; }}
         </style></head><body>
-        <table width="680" cellspacing="0" cellpadding="0" style="border-bottom: 2px solid #093567; padding-bottom: 8px; margin-bottom: 10px;">
+        <table width="680" cellspacing="0" cellpadding="0" style="border-bottom: 2px solid #12355B; padding-bottom: 8px; margin-bottom: 10px;">
             <tr>
                 <td width="460" valign="middle">
-                    <div style="font-size: 12pt; font-weight: bold; color: #093567;">T.C. YÜKSEKÖĞRETİM KURULU — ÖĞRENCİ BİLGİ SİSTEMİ</div>
+                    <div style="font-size: 12pt; font-weight: bold; color: #12355B;">T.C. YÜKSEKÖĞRETİM KURULU — ÖĞRENCİ BİLGİ SİSTEMİ</div>
                     <div style="font-size: 9.5pt; font-weight: bold; color: #334155; margin-top: 2px;">RESMİ NOT DÖKÜM BELGESİ (TRANSKRİPT)</div>
                 </td>
                 <td width="220" align="right" valign="middle" style="font-size: 8pt; color: #1e293b;">
                     <b>Belge Tarihi:</b> {tarih_str}<br>
-                    <b>SHA-256 Doğrulama Kodu:</b> <span style="color:#093567; font-weight:bold;">{kod}</span>
+                    <b>SHA-256 Doğrulama Kodu:</b> <span style="color:#12355B; font-weight:bold;">{kod}</span>
                 </td>
             </tr>
         </table>
@@ -519,6 +938,7 @@ class OgrenciNotlarTranskript(QWidget):
         doc.print_(pdf)
         subprocess.run(["open", dosya])
 
+
 class OgrenciMezuniyetSimulasyon(QWidget):
     def __init__(self, db: Veritabani):
         super().__init__()
@@ -528,7 +948,7 @@ class OgrenciMezuniyetSimulasyon(QWidget):
         self.lay.setSpacing(12)
 
         ust = QHBoxLayout()
-        baslik = QLabel("Mezuniyetime Ne Kaldı? — Müfredat Denetimi & ACID Simülasyonu")
+        baslik = QLabel("Mezuniyetime Ne Kaldı? — Önkoşul DAG Haritası, Müfredat Denetimi & ACID Simülasyonu")
         baslik.setObjectName("SayfaBaslik")
         ust.addWidget(baslik)
         ust.addStretch()
@@ -538,7 +958,7 @@ class OgrenciMezuniyetSimulasyon(QWidget):
         btn_acid.clicked.connect(lambda: AcidDeneGeriAlDialog(self.db, self).exec())
         ust.addWidget(btn_acid)
 
-        btn_yenile = QPushButton("Yenile")
+        btn_yenile = QPushButton("↻  Yenile (F5)")
         btn_yenile.setObjectName("IkincilBtn")
         btn_yenile.clicked.connect(self.yenile)
         ust.addWidget(btn_yenile)
@@ -548,25 +968,46 @@ class OgrenciMezuniyetSimulasyon(QWidget):
         self.kart_lay.setSpacing(12)
         self.lay.addLayout(self.kart_lay)
 
-        k1 = QFrame(); k1.setObjectName("PortalKart")
-        l1 = QVBoxLayout(k1); l1.setContentsMargins(14, 12, 14, 12)
+        self.sekmeler = QTabWidget()
+
+        # Sekme 1: İnteraktif Önkoşul DAG Haritası (QGraphicsScene)
+        self.dag_harita = OnkosulHaritasiWidget(self.db)
+        self.sekmeler.addTab(self.dag_harita, "🕸️  İnteraktif Önkoşul Haritası (QGraphicsScene)")
+
+        # Sekme 2: Müfredat Grup Denetimi & Topolojik Plan Tabloları
+        w_tablolar = QWidget()
+        l_tab = QVBoxLayout(w_tablolar)
+        l_tab.setContentsMargins(10, 10, 10, 10)
+        l_tab.setSpacing(12)
+
+        k1 = QFrame()
+        k1.setObjectName("PortalKart")
+        l1 = QVBoxLayout(k1)
+        l1.setContentsMargins(14, 12, 14, 12)
         l1.addWidget(QLabel("<b>🎓 Müfredat ve Seçmeli Grup Denetimi (fn_mezuniyet_denetim_ben)</b>"))
         self.tbl_denetim = QTableWidget(0, 7)
         self.tbl_denetim.setHorizontalHeaderLabels(["Grup Adı", "Tür", "Min Ders", "Min AKTS", "Sayılan Ders", "Sayılan AKTS", "Durum / Eksik"])
         self.tbl_denetim.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_denetim.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_denetim.setEditTriggers(QTableWidget.NoEditTriggers)
         l1.addWidget(self.tbl_denetim)
-        self.lay.addWidget(k1, 1)
+        l_tab.addWidget(k1, 1)
 
-        k2 = QFrame(); k2.setObjectName("PortalKart")
-        l2 = QVBoxLayout(k2); l2.setContentsMargins(14, 12, 14, 12)
+        k2 = QFrame()
+        k2.setObjectName("PortalKart")
+        l2 = QVBoxLayout(k2)
+        l2.setContentsMargins(14, 12, 14, 12)
         l2.addWidget(QLabel("<b>🗓️ Önkoşul DAG Topolojik Ders Planı (fn_ders_plani_ben)</b>"))
         self.tbl_plan = QTableWidget(0, 4)
         self.tbl_plan.setHorizontalHeaderLabels(["Önerilen Dönem Sırası", "Ders Kodu", "Ders Adı", "AKTS"])
         self.tbl_plan.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_plan.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_plan.setEditTriggers(QTableWidget.NoEditTriggers)
         l2.addWidget(self.tbl_plan)
-        self.lay.addWidget(k2, 1)
+        l_tab.addWidget(k2, 1)
+
+        self.sekmeler.addTab(w_tablolar, "📋  Müfredat Grup Denetimi & Dönemlik Plan Tablosu")
+        self.lay.addWidget(self.sekmeler, 1)
 
         self.yenile()
 
@@ -586,38 +1027,46 @@ class OgrenciMezuniyetSimulasyon(QWidget):
             ak = int(r.get("akts") or 0)
             h = r.get("harf")
             if h in katsayi:
-                tp += ak * katsayi[h]; ta += ak
+                tp += ak * katsayi[h]
+                ta += ak
             if r.get("durum") == "gecti":
                 ga += ak
         gno = (tp / ta) if ta > 0 else 0.0
-        eksik_var = any(not d.get("tamam", False) for d in denetim)
-        max_donem = max([int(p.get("onerilen_donem") or p.get("donem_no") or 1) for p in plan], default=0)
+        eksik_var = any(d.get("durum") != "tamam" for d in denetim)
+        max_donem = max([int(p.get("donem_sira") or p.get("onerilen_donem") or p.get("donem_no") or 1) for p in plan], default=0)
 
-        self.kart_lay.addWidget(bilgi_karti("Mezuniyet Durumu", "Eksikler Var" if eksik_var else "Mezun Olabilir ✓", "🎓", "#dc2626" if eksik_var else "#16a34a"))
-        self.kart_lay.addWidget(bilgi_karti("AKTS (Geçilen / Hedef)", f"{ga} / 240", "⚖️", "#1d70db"))
-        self.kart_lay.addWidget(bilgi_karti("GNO (Mevcut / Min)", f"{gno:.2f} / 2.00", "🅰️", "#16a34a"))
-        self.kart_lay.addWidget(bilgi_karti("DAG Kritik Yol", f"{max_donem} Dönem", "🕸️", "#7e22ce"))
+        self.kart_lay.addWidget(
+            bilgi_karti("Mezuniyet Durumu", "Eksikler Var" if eksik_var else "Mezun Olabilir ✔", "🎓", "#B91C1C" if eksik_var else "#15803D")
+        )
+        self.kart_lay.addWidget(bilgi_karti("AKTS (Geçilen / Hedef)", f"{ga} / 240", "⚖️", "#2563EB"))
+        self.kart_lay.addWidget(bilgi_karti("GNO (Mevcut / Min)", f"{gno:.2f} / 2.00", "🅰️", "#15803D"))
+        self.kart_lay.addWidget(bilgi_karti("DAG Kritik Yol", f"{max_donem} Dönem", "🕸️", "#2563EB"))
+
+        self.dag_harita.yukle()
 
         self.tbl_denetim.setRowCount(0)
         for d in denetim:
-            r = self.tbl_denetim.rowCount(); self.tbl_denetim.insertRow(r)
+            r = self.tbl_denetim.rowCount()
+            self.tbl_denetim.insertRow(r)
             self.tbl_denetim.setItem(r, 0, QTableWidgetItem(str(d.get("grup_ad") or "")))
             self.tbl_denetim.setItem(r, 1, QTableWidgetItem(str(d.get("tur") or "")))
             self.tbl_denetim.setItem(r, 2, QTableWidgetItem(str(d.get("min_ders") or 0)))
             self.tbl_denetim.setItem(r, 3, QTableWidgetItem(str(d.get("min_akts") or 0)))
             self.tbl_denetim.setItem(r, 4, QTableWidgetItem(str(d.get("sayilan_ders") or 0)))
             self.tbl_denetim.setItem(r, 5, QTableWidgetItem(str(d.get("sayilan_akts") or 0)))
-            eksik_metin = str(d.get("eksik_aciklama") or d.get("aciklama") or ("Tamam ✓" if d.get("tamam") else "Eksik"))
+            tamam_mi = d.get("durum") == "tamam" or d.get("tamam") is True
+            eksik_metin = "✔ Tamam" if tamam_mi else f"✖ Eksik: {d.get('eksik') or d.get('eksik_aciklama') or ''}"
             it = QTableWidgetItem(eksik_metin)
-            it.setBackground(QBrush(QColor("#dcfce7" if d.get("tamam") else "#fee2e2")))
+            it.setBackground(QBrush(QColor("#DCFCE7" if tamam_mi else "#FEE2E2")))
+            it.setForeground(QBrush(QColor("#15803D" if tamam_mi else "#B91C1C")))
             self.tbl_denetim.setItem(r, 6, it)
 
         self.tbl_plan.setRowCount(0)
         for p in plan:
-            r = self.tbl_plan.rowCount(); self.tbl_plan.insertRow(r)
-            d_no = p.get("onerilen_donem") or p.get("donem_no") or 1
+            r = self.tbl_plan.rowCount()
+            self.tbl_plan.insertRow(r)
+            d_no = p.get("donem_sira") or p.get("onerilen_donem") or p.get("donem_no") or 1
             self.tbl_plan.setItem(r, 0, QTableWidgetItem(f"{d_no}. Dönem"))
             self.tbl_plan.setItem(r, 1, QTableWidgetItem(str(p.get("ders_kod") or p.get("kod") or "")))
             self.tbl_plan.setItem(r, 2, QTableWidgetItem(str(p.get("ders_ad") or p.get("ad") or "")))
             self.tbl_plan.setItem(r, 3, QTableWidgetItem(str(p.get("akts") or 0)))
-

@@ -1,0 +1,72 @@
+[
+  {
+    "adim": 1,
+    "baslik": "Öğrenci Portalı ve Akademik Özet",
+    "rol": "rol_ogrenci",
+    "ekran": 0,
+    "ipucu": "RLS (Satır Düzeyi Güvenlik) altında öğrencinin kendi GNO, DNO, AKTS ve dönem çizelgesini inceleyin."
+  },
+  {
+    "adim": 2,
+    "baslik": "Ders Seçimi, Hover Önizleme ve AKTS Çubuğu",
+    "rol": "rol_ogrenci",
+    "ekran": 1,
+    "ipucu": "Sol %60 şube listesinde satırların üzerine gelerek sağdaki %40 haftalık programda %40 saydam gölge ve kırmızı çapraz taramalı çakışma önizlemesini test edin."
+  },
+  {
+    "adim": 3,
+    "baslik": "Sepet Kesinleştirme ve Kullanıcı Dili Hatalar",
+    "rol": "rol_ogrenci",
+    "ekran": 1,
+    "ipucu": "Sepete şube ekleyip Ctrl+Enter ile kesinleştirin; AKTS aşımı veya önkoşul engellerinin kullanıcı dilinde ve katlanır teknik ayrıntıyla gösterildiğini görün."
+  },
+  {
+    "adim": 4,
+    "baslik": "Önkoşul DAG Haritası ve Kritik Yol",
+    "rol": "rol_ogrenci",
+    "ekran": 3,
+    "ipucu": "QGraphicsScene üzerindeki 120×44 px ders düğümlerine tıklayarak eksik önkoşul zincirini vurgulayın ve kalın çizgili kritik yolu inceleyin."
+  },
+  {
+    "adim": 5,
+    "baslik": "Resmi Transkript ve SHA-256 Belge Doğrulama",
+    "rol": "rol_ogrenci",
+    "ekran": 2,
+    "ipucu": "SHA-256 özetli transkript belgesi üretin, 12 haneli doğrulama kodunu test edin veya PDF olarak dışa aktarın."
+  },
+  {
+    "adim": 6,
+    "baslik": "Danışman Onay Kuyruğu ve Gerekçeli Karar",
+    "rol": "rol_danisman",
+    "ekran": 0,
+    "ipucu": "Danışman rolüne geçerek öğrencinin kesinleştirdiği dersleri onaylayın veya zorunlu gerekçe girerek reddedin."
+  },
+  {
+    "adim": 7,
+    "baslik": "YZ (OULAD) Akademik Risk ve Bayrak Paneli",
+    "rol": "rol_danisman",
+    "ekran": 1,
+    "ipucu": "Danışanların kural tabanlı risk bayraklarını ve makine öğrenmesi (Lojistik Regresyon / Random Forest) risk tahmin skorlarını inceleyin."
+  },
+  {
+    "adim": 8,
+    "baslik": "Öğretim Üyesi Not Girişi ve Gerekçeli Düzeltme",
+    "rol": "rol_ogretim_uyesi",
+    "ekran": 0,
+    "ipucu": "Şube değerlendirme bileşenlerini (%40 Vize + %60 Final) tanımlayın, notları ilan edin ve ilan sonrası gerekçeli düzeltme yapın."
+  },
+  {
+    "adim": 9,
+    "baslik": "Sekreterlik: EXCLUDE Korumalı Danışman Atama",
+    "rol": "rol_sekreter",
+    "ekran": 0,
+    "ipucu": "PostgreSQL daterange EXCLUDE kısıtı sayesinde çakışmasız danışman ataması yapın ve dönemlik risk bayraklarını hesaplatın."
+  },
+  {
+    "adim": 10,
+    "baslik": "Yönetici: SHA-256 Denetim Log Zinciri Doğrulama",
+    "rol": "rol_yonetici",
+    "ekran": 0,
+    "ipucu": "Yalnızca yöneticinin erişebildiği değiştirilemez denetim logunu ve fn_denetim_dogrula() ile SHA-256 zincir bütünlüğünü doğrulayın."
+  }
+]
