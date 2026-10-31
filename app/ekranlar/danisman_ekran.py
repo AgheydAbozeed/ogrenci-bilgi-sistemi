@@ -57,13 +57,14 @@ class DanismanOnayKuyrugu(QWidget):
                 item.widget().deleteLater()
 
         kuyruk = self.db.sorgula("SELECT * FROM v_onay_kuyrugu ORDER BY olusturma")
-        danisan_sayisi = len(self.db.sorgula("SELECT 1 FROM v_danisanlarim"))
+        danisan_sayisi = int((self.db.tek_satir("SELECT count(*)::int AS c FROM v_danisanlarim") or {}).get("c", 0))
         toplam_akts = sum(int(r["akts"] or 0) for r in kuyruk)
 
         self.kart_lay.addWidget(bilgi_karti("Bekleyen Onay Talebi", f"{len(kuyruk)} Kayıt", "⏳", "#92400E"))
         self.kart_lay.addWidget(bilgi_karti("Onay Bekleyen AKTS", f"{toplam_akts} AKTS", "±÷", "#2563EB"))
         self.kart_lay.addWidget(bilgi_karti("Aktif Danışan Öğrenci", f"{danisan_sayisi} Öğrenci", "👥", "#15803D"))
 
+        self.tbl.setUpdatesEnabled(False)
         self.tbl.setRowCount(0)
         for r in kuyruk:
             row = self.tbl.rowCount()
@@ -89,6 +90,7 @@ class DanismanOnayKuyrugu(QWidget):
             h.addWidget(btn_onay)
             h.addWidget(btn_ret)
             self.tbl.setCellWidget(row, 6, w)
+        self.tbl.setUpdatesEnabled(True)
 
     def karar_ver(self, kayit_id: int, karar: str):
         gerekce = None

@@ -659,13 +659,16 @@ class OgrenciNotlarTranskript(QWidget):
 
         ozet = self.db.tek_satir("SELECT * FROM v_ana_sayfa") or {}
         notlar = self.db.sorgula("SELECT * FROM v_not_detay ORDER BY kayit_id DESC, bilesen")
-        tr = self.db.sorgula("SELECT * FROM v_transkript ORDER BY yil, donem, kod")
+        tr = self.db.sorgula(
+            "SELECT * FROM v_transkript ORDER BY yil, CASE donem WHEN 'guz' THEN 1 WHEN 'bahar' THEN 2 ELSE 3 END, kod"
+        )
 
         self.kart_lay.addWidget(bilgi_karti("Genel Not Ortalaması", str(ozet.get("gno") or "-"), "A+", "#2563EB"))
         self.kart_lay.addWidget(bilgi_karti("Dönem Not Ortalaması", str(ozet.get("dno") or "-"), "📊", "#2563EB"))
         self.kart_lay.addWidget(bilgi_karti("Geçilen Toplam AKTS", f"{ozet.get('gecilen_akts', 0)} AKTS", "±÷", "#15803D"))
         self.kart_lay.addWidget(bilgi_karti("Transkript Ders Sayısı", f"{len(tr)} Ders", "📚", "#2563EB"))
 
+        self.tbl_notlar.setUpdatesEnabled(False)
         self.tbl_notlar.setRowCount(0)
         for r in notlar:
             row = self.tbl_notlar.rowCount()
@@ -675,7 +678,9 @@ class OgrenciNotlarTranskript(QWidget):
             self.tbl_notlar.setItem(row, 2, QTableWidgetItem(str(r["bilesen"])))
             self.tbl_notlar.setItem(row, 3, QTableWidgetItem(str(r["agirlik"])))
             self.tbl_notlar.setItem(row, 4, QTableWidgetItem(str(r["puan"])))
+        self.tbl_notlar.setUpdatesEnabled(True)
 
+        self.tbl_tr.setUpdatesEnabled(False)
         self.tbl_tr.setRowCount(0)
         for r in tr:
             row = self.tbl_tr.rowCount()
@@ -701,6 +706,7 @@ class OgrenciNotlarTranskript(QWidget):
                 durum_item.setForeground(QBrush(QColor("#B91C1C")))
             self.tbl_tr.setItem(row, 5, harf_item)
             self.tbl_tr.setItem(row, 6, durum_item)
+        self.tbl_tr.setUpdatesEnabled(True)
 
     def belge_uret(self):
         try:
@@ -763,6 +769,16 @@ class OgrenciNotlarTranskript(QWidget):
         giris_yili = int(profil.get("giris_yili") or (kayitlar[0]["yil"] if kayitlar else 2025))
 
         donemler = OrderedDict()
+        okunan_donemler = self.db.sorgula(
+            """SELECT yil, tur AS donem
+                 FROM donem
+                WHERE yil >= %s
+                ORDER BY yil, CASE tur WHEN 'guz' THEN 1 WHEN 'bahar' THEN 2 ELSE 3 END""",
+            (giris_yili,)
+        )
+        for od in okunan_donemler:
+            donemler.setdefault((int(od["yil"]), str(od["donem"]).lower()), [])
+
         for r in kayitlar:
             k = (int(r["yil"]), str(r["donem"]).lower())
             donemler.setdefault(k, []).append(r)
@@ -773,7 +789,7 @@ class OgrenciNotlarTranskript(QWidget):
                  JOIN donem dm ON dm.donem_id = k.donem_id
                  JOIN ders d ON d.ders_id = k.ders_id
                 WHERE k.ogrenci_id = fn_oturum_kisi_id()
-                  AND k.durum IN ('onayli', 'onay_bekliyor')
+                  AND k.durum IN ('sepet', 'onayli', 'onay_bekliyor')
                 ORDER BY d.kod"""
         )
         for ad in aktif_dersler:
@@ -784,6 +800,8 @@ class OgrenciNotlarTranskript(QWidget):
                     "yil": ad["yil"], "donem": ad["donem"], "kod": ad["kod"],
                     "ders_adi": ad["ders_adi"], "akts": ad["akts"], "harf": None
                 })
+        # Boş kalan gelecek dönemleri ayıkla ama en azından ders içeren tüm dönemleri tut
+        donemler = OrderedDict((k, v) for k, v in donemler.items() if v)
 
         kutular_html = []
         g_kredi = 0

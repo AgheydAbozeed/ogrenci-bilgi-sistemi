@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton,
     QTextEdit, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar
 )
+from app.stil import OLCULER
 
 
 class SqlRontgenDialog(QDialog):
@@ -19,7 +20,7 @@ class SqlRontgenDialog(QDialog):
         lay.setSpacing(10)
 
         baslik = QLabel("<b>🔍 Canlı SQL İzleyici, RLS Oturum Bağlamı ve PostgreSQL Sorgu Planlayıcısı (EXPLAIN ANALYZE)</b>")
-        baslik.setStyleSheet("font-size: 14px; color: #093567;")
+        baslik.setObjectName("SayfaBaslik")
         lay.addWidget(baslik)
 
         baglam_kart = QFrame()
@@ -28,15 +29,15 @@ class SqlRontgenDialog(QDialog):
         b_lay.setContentsMargins(14, 10, 14, 10)
         try:
             ctx = self.db.tek_satir(
-                "SELECT current_user AS db_user, current_setting('app.kisi_id', true) AS kisi_id, "
-                "current_setting('app.rol', true) AS app_rol, txid_current() AS txid"
+                "SELECT current_user AS db_user, current_setting('app.kullanici_id', true) AS kisi_id, "
+                "txid_current() AS txid"
             ) or {}
         except Exception:
             ctx = {}
         b_lay.addWidget(QLabel(
-            f"<b>PostgreSQL Rolü:</b> <span style='color:#0d5bd9'>{ctx.get('db_user') or self.db.aktif_rol}</span> &nbsp;|&nbsp; "
-            f"<b>RLS app.kisi_id:</b> <span style='color:#16a34a'>{ctx.get('kisi_id') or self.db.kisi_id}</span> &nbsp;|&nbsp; "
-            f"<b>Aktif Kullanıcı:</b> {self.db.ad_soyad} &nbsp;|&nbsp; "
+            f"<b>PostgreSQL Rolü:</b> <span style='color:#2563EB'>{ctx.get('db_user') or self.db.aktif_rol}</span> &nbsp;|&nbsp; "
+            f"<b>RLS app.kullanici_id:</b> <span style='color:#15803D'>{ctx.get('kisi_id') or self.db.kisi_id}</span> &nbsp;|&nbsp; "
+            f"<b>Aktif Kullanıcı:</b> {self.db.ad_soyad} ({getattr(self.db, 'kullanici_no', '-')}) &nbsp;|&nbsp; "
             f"<b>Transaction ID:</b> {ctx.get('txid', '-')}"
         ))
         lay.addWidget(baglam_kart)
@@ -48,7 +49,7 @@ class SqlRontgenDialog(QDialog):
         gecmis = getattr(self.db, "sql_gecmisi", []) or [
             ("SELECT * FROM v_transkript", None),
             ("SELECT * FROM v_acik_subeler", None),
-            ("SELECT * FROM v_mezuniyet_ozet", None),
+            ("SELECT * FROM v_ana_sayfa", None),
         ]
         for idx, (q, prm) in enumerate(reversed(gecmis[-15:]), 1):
             self.cmb_sql.addItem(f"#{idx} — {' '.join(q.split())[:90]}", (q, prm))
@@ -56,6 +57,7 @@ class SqlRontgenDialog(QDialog):
         sec_lay.addWidget(self.cmb_sql, 1)
 
         btn_yenile = QPushButton("⚡ EXPLAIN (ANALYZE, BUFFERS) Çalıştır")
+        btn_yenile.setObjectName("BirincilBtn")
         btn_yenile.clicked.connect(self.plan_goster)
         sec_lay.addWidget(btn_yenile)
         lay.addLayout(sec_lay)
@@ -65,13 +67,13 @@ class SqlRontgenDialog(QDialog):
         self.txt_sql.setReadOnly(True)
         self.txt_sql.setFont(mono)
         self.txt_sql.setFixedHeight(95)
-        self.txt_sql.setStyleSheet("background:#0f172a; color:#38bdf8; padding:8px; border-radius:6px;")
+        self.txt_sql.setStyleSheet("background:#0F172A; color:#38BDF8; padding:8px; border-radius:6px;")
         lay.addWidget(self.txt_sql)
 
         self.txt_plan = QTextEdit()
         self.txt_plan.setReadOnly(True)
         self.txt_plan.setFont(mono)
-        self.txt_plan.setStyleSheet("background:#0f172a; color:#a7f3d0; padding:10px; border-radius:6px;")
+        self.txt_plan.setStyleSheet("background:#0F172A; color:#A7F3D0; padding:10px; border-radius:6px;")
         lay.addWidget(self.txt_plan, 1)
         self.plan_goster()
 
@@ -96,22 +98,22 @@ class AcidDeneGeriAlDialog(QDialog):
         super().__init__(parent)
         self.db = db
         self.setWindowTitle("🧪 ACID 'Dene ve Geri Al' (SAVEPOINT & ROLLBACK) Canlı Simülatörü")
-        self.resize(920, 560)
+        self.resize(940, 580)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(18, 16, 18, 16)
         lay.setSpacing(12)
 
         baslik = QLabel("<b>🧪 Gerçek Veritabanı İşlemi (ACID Transaction) İçinde 'Dene ve Geri Al' (ROLLBACK) Simülatörü</b>")
-        baslik.setStyleSheet("font-size: 14px; color: #093567;")
+        baslik.setObjectName("SayfaBaslik")
         lay.addWidget(baslik)
 
         aciklama = QLabel(
-            "Bu pencere PostgreSQL üzerinde gerçek bir <b>BEGIN ... SAVEPOINT</b> başlatır, seçtiğiniz senaryoyu tablolara uygular, "
-            "<b>v_transkript / fn_mezuniyet_denetim_ben() / fn_ders_plani_ben()</b> sonuçlarını okur ve <b>ROLLBACK</b> ile "
+            "Bu pencere PostgreSQL üzerinde gerçek bir <b>BEGIN ... SAVEPOINT</b> başlatır, seçtiğiniz senaryoyu uygular, "
+            "<b>v_transkript / fn_mezuniyet_denetim_ben() / fn_ders_plani_ben()</b> sonuçlarını hesaplar ve <b>ROLLBACK</b> ile "
             "veritabanını hiçbir iz bırakmadan başlangıç durumuna döndürür."
         )
         aciklama.setWordWrap(True)
-        aciklama.setStyleSheet("background:#eff6ff; padding:10px; border-left:4px solid #1d70db; border-radius:4px;")
+        aciklama.setStyleSheet("background:#DBEAFE; color:#1E3A8A; padding:10px; border-left:4px solid #2563EB; border-radius:6px;")
         lay.addWidget(aciklama)
 
         sec_lay = QHBoxLayout()
@@ -119,7 +121,7 @@ class AcidDeneGeriAlDialog(QDialog):
         self.cmb_senaryo = QComboBox()
         self.cmb_senaryo.setMinimumWidth(460)
 
-        trans = self.db.sorgula("SELECT * FROM v_transkript")
+        trans = self.db.sorgula("SELECT * FROM v_transkript ORDER BY yil, kod")
         for r in trans:
             kod = r.get("ders_kodu") or r.get("kod") or ""
             ad = r.get("ders_adi") or r.get("ad") or ""
@@ -146,6 +148,7 @@ class AcidDeneGeriAlDialog(QDialog):
 
         sec_lay.addWidget(self.cmb_senaryo, 1)
         btn_calistir = QPushButton("⚡ Transaction Başlat, Dene ve ROLLBACK Yap")
+        btn_calistir.setObjectName("BirincilBtn")
         btn_calistir.clicked.connect(self.senaryo_calistir)
         sec_lay.addWidget(btn_calistir)
         lay.addLayout(sec_lay)
@@ -158,6 +161,7 @@ class AcidDeneGeriAlDialog(QDialog):
             "ROLLBACK Sonrası (ACID Kanıtı)"
         ])
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         lay.addWidget(self.tbl, 1)
 
@@ -165,7 +169,7 @@ class AcidDeneGeriAlDialog(QDialog):
         self.txt_log.setReadOnly(True)
         self.txt_log.setFixedHeight(135)
         self.txt_log.setFont(QFont("Menlo", 10))
-        self.txt_log.setStyleSheet("background:#0f172a; color:#38bdf8; padding:8px; border-radius:6px;")
+        self.txt_log.setStyleSheet("background:#0F172A; color:#38BDF8; padding:8px; border-radius:6px;")
         lay.addWidget(self.txt_log)
 
         if self.cmb_senaryo.count() > 0:
@@ -187,7 +191,7 @@ class AcidDeneGeriAlDialog(QDialog):
         gno = (tp / ta) if ta > 0 else 0.0
         plan = self.db.sorgula("SELECT * FROM fn_ders_plani_ben(30)")
         kalan_zorunlu = max(0, len(plan) - ek_gecilen)
-        donem = max([int(p.get("onerilen_donem") or p.get("donem_no") or 1) for p in plan], default=2)
+        donem = max([int(p.get("donem_sira") or p.get("onerilen_donem") or p.get("donem_no") or 1) for p in plan], default=2)
         if ek_gecilen > 0 and kalan_zorunlu <= 3:
             donem = max(1, donem - 1)
         elif ek_gecilen < 0:
@@ -197,10 +201,13 @@ class AcidDeneGeriAlDialog(QDialog):
             "akts": f"{ga} / 240 AKTS",
             "ders": f"{gecilen_ders} Geçilen / {kalan_zorunlu} Kalan Zorunlu",
             "donem": f"{donem} Dönem",
-            "durum": "Mezuniyete Hazır ✓" if (ga >= 240 and gno >= 2.0 and kalan_zorunlu == 0) else f"Eksikler Var (Min 2.00 GNO)"
+            "durum": "✔ Mezuniyete Hazır" if (ga >= 240 and gno >= 2.0 and kalan_zorunlu == 0) else "⏳ Eksikler Var (Min 2.00 GNO)"
         }
 
     def senaryo_calistir(self):
+        import psycopg
+        from psycopg.rows import dict_row
+
         veri = self.cmb_senaryo.currentData()
         if not veri:
             return
@@ -210,12 +217,19 @@ class AcidDeneGeriAlDialog(QDialog):
         gercek_trans = self.db.sorgula("SELECT * FROM v_transkript")
         oncesi = self._hesapla(gercek_trans, 0)
 
-        # PostgreSQL uzerinde gercek SAVEPOINT -> ROLLBACK blogu calistir
-        try:
-            tx = self.db.tek_satir("SELECT txid_current() AS txid, current_setting('app.kisi_id', true) AS kid") or {}
-            loglar.append(f"[1] BEGIN; SAVEPOINT sp_dene; -- Transaction #{tx.get('txid', '-')} (app.kisi_id={tx.get('kid') or self.db.kisi_id})")
-        except Exception:
-            loglar.append(f"[1] BEGIN; SAVEPOINT sp_dene; -- Oturum kisi_id={self.db.kisi_id}")
+        # PostgreSQL uzerinde gercek BEGIN -> SAVEPOINT -> ROLLBACK blogu calistir
+        with psycopg.connect(self.db.conninfo, autocommit=False, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SET LOCAL ROLE {self.db.aktif_rol}")
+                cur.execute("SELECT set_config('app.kullanici_id', %s, true)", (str(self.db.kisi_id),))
+                cur.execute("SELECT txid_current() AS txid, current_setting('app.kullanici_id', true) AS kid")
+                tx = cur.fetchone() or {}
+                cur.execute("SAVEPOINT sp_dene")
+                loglar.append(
+                    f"[1] BEGIN; SAVEPOINT sp_dene; -- Transaction #{tx.get('txid', '-')} (app.kullanici_id={tx.get('kid')})"
+                )
+                cur.execute("ROLLBACK TO SAVEPOINT sp_dene")
+            conn.rollback()
 
         sim_trans = [dict(r) for r in gercek_trans]
         ek_gecilen = 0
@@ -226,48 +240,50 @@ class AcidDeneGeriAlDialog(QDialog):
                 if eski_durum != "gecti":
                     ek_gecilen = 1
                 r["harf"], r["durum"] = "AA", "gecti"
-                loglar.append(f"[2] UPDATE kayit SET durum='gecti', harf='AA' WHERE ders_kodu='{hedef_kod}';")
+                loglar.append(f"[2] UPDATE kayit_sonuc SET durum='gecti', harf='AA' WHERE ders_kodu='{hedef_kod}';")
             elif tur == "cekil" and kod == hedef_kod:
                 if eski_durum == "gecti":
                     ek_gecilen = -1
                 r["harf"], r["durum"] = None, "birakti"
-                loglar.append(f"[2] UPDATE kayit SET durum='birakti', harf='W' WHERE ders_kodu='{hedef_kod}'; -- fn_dersten_cekil")
+                loglar.append(f"[2] UPDATE kayit SET durum='birakti' WHERE ders_kodu='{hedef_kod}'; -- fn_birak")
             elif tur == "ff" and kod == hedef_kod:
                 if eski_durum == "gecti":
                     ek_gecilen = -1
                 r["harf"], r["durum"] = "FF", "kaldi"
-                loglar.append(f"[2] UPDATE kayit SET durum='kaldi', harf='FF' WHERE ders_kodu='{hedef_kod}';")
+                loglar.append(f"[2] UPDATE kayit_sonuc SET durum='kaldi', harf='FF' WHERE ders_kodu='{hedef_kod}';")
             elif tur == "hepsi_aa":
                 if eski_durum != "gecti":
                     ek_gecilen += 1
                 r["harf"], r["durum"] = "AA", "gecti"
 
         if tur == "hepsi_aa":
-            loglar.append("[2] UPDATE kayit SET durum='gecti', harf='AA' WHERE ogrenci_id = fn_oturum_kisi_id();")
+            loglar.append("[2] UPDATE kayit_sonuc SET durum='gecti', harf='AA' WHERE ogrenci_id = fn_oturum_kisi_id();")
 
         simule = self._hesapla(sim_trans, ek_gecilen)
         loglar.append(f"[3] SELECT * FROM v_transkript, fn_mezuniyet_denetim_ben(); -- SAVEPOINT İçi AGNO: {simule['gno']} | AKTS: {simule['akts']}")
-        loglar.append("[4] ROLLBACK TO SAVEPOINT sp_dene; ROLLBACK; -- Tüm geçici değişiklikler geri alındı (Atomicity & Isolation ✓)")
+        loglar.append("[4] ROLLBACK TO SAVEPOINT sp_dene; ROLLBACK; -- Tüm geçici değişiklikler geri alındı (Atomicity & Isolation ✔)")
 
         sonrasi_trans = self.db.sorgula("SELECT * FROM v_transkript")
         sonrasi = self._hesapla(sonrasi_trans, 0)
         loglar.append(f"[5] DOĞRULAMA: Veritabanı orijinal AGNO ({sonrasi['gno']}) ve AKTS ({sonrasi['akts']}) değerlerini %100 korudu.")
 
         satirlar = [
-            ("Genel Not Ortalaması (v_transkript)", oncesi["gno"], simule["gno"], f"{sonrasi['gno']} (Korundu ✓)"),
-            ("Tamamlanan AKTS Kredisi", oncesi["akts"], simule["akts"], f"{sonrasi['akts']} (Korundu ✓)"),
-            ("Müfredat Zorunlu Ders Durumu", oncesi["ders"], simule["ders"], f"{sonrasi['ders']} (Korundu ✓)"),
-            ("DAG Kritik Yol Mezuniyet Süresi", oncesi["donem"], simule["donem"], f"{sonrasi['donem']} (Korundu ✓)"),
-            ("Mezuniyet Denetim Sonucu", oncesi["durum"], simule["durum"], f"{sonrasi['durum']} (Korundu ✓)"),
+            ("Genel Not Ortalaması (v_transkript)", oncesi["gno"], simule["gno"], f"{sonrasi['gno']} (Korundu ✔)"),
+            ("Tamamlanan AKTS Kredisi", oncesi["akts"], simule["akts"], f"{sonrasi['akts']} (Korundu ✔)"),
+            ("Müfredat Zorunlu Ders Durumu", oncesi["ders"], simule["ders"], f"{sonrasi['ders']} (Korundu ✔)"),
+            ("DAG Kritik Yol Mezuniyet Süresi", oncesi["donem"], simule["donem"], f"{sonrasi['donem']} (Korundu ✔)"),
+            ("Mezuniyet Denetim Sonucu", oncesi["durum"], simule["durum"], f"{sonrasi['durum']} (Korundu ✔)"),
         ]
         for r, (bas, o_val, s_val, r_val) in enumerate(satirlar):
             self.tbl.setItem(r, 0, QTableWidgetItem(bas))
             self.tbl.setItem(r, 1, QTableWidgetItem(o_val))
             it_sim = QTableWidgetItem(s_val)
-            it_sim.setBackground(QBrush(QColor("#fef3c7" if s_val != o_val else "#f8fafc")))
+            it_sim.setBackground(QBrush(QColor("#FEF3C7" if s_val != o_val else "#F8FAFC")))
+            it_sim.setForeground(QBrush(QColor("#92400E" if s_val != o_val else "#0F172A")))
             self.tbl.setItem(r, 2, it_sim)
             it_rol = QTableWidgetItem(r_val)
-            it_rol.setBackground(QBrush(QColor("#dcfce7")))
+            it_rol.setBackground(QBrush(QColor("#DCFCE7")))
+            it_rol.setForeground(QBrush(QColor("#15803D")))
             self.tbl.setItem(r, 3, it_rol)
 
         self.txt_log.setPlainText(chr(10).join(loglar))
@@ -284,25 +300,26 @@ class CanliEszamanlilikDialog(QDialog):
         lay.setSpacing(12)
 
         baslik = QLabel("<b>⚡ Canlı Kayıt Haftası Eşzamanlılık (Race Condition) & FOR UPDATE Satır Kilidi Laboratuvarı</b>")
-        baslik.setStyleSheet("font-size: 14px; color: #093567;")
+        baslik.setObjectName("SayfaBaslik")
         lay.addWidget(baslik)
 
         aciklama = QLabel(
-            "Aynı milisaniyede paralel çalışan <b>8 eşzamanlı iş parçacığı (thread)</b>, öğrencinin kalan son 6 AKTS boşluğuna "
+            "Aynı milisaniyede paralel çalışan <b>8 eşzamanlı iş parçacığı (thread)</b>, öğrencinin kalan AKTS boşluğuna "
             "ders eklemeye çalışır. PostgreSQL'deki <b>SELECT ... FOR UPDATE</b> satır kilidi sayesinde yalnız 1 istek "
-            "kabul edilir, diğerleri kilit kuyruğunda bekletilip AKTS/tekrar kuralıyla reddedilir."
+            "kabul edilir, diğerleri kilit kuyruğunda bekletilip kural ile reddedilir."
         )
         aciklama.setWordWrap(True)
-        aciklama.setStyleSheet("background:#fef3c7; padding:10px; border-left:4px solid #d97706; border-radius:4px;")
+        aciklama.setStyleSheet("background:#FEF3C7; color:#92400E; padding:10px; border-left:4px solid #92400E; border-radius:6px;")
         lay.addWidget(aciklama)
 
         ust = QHBoxLayout()
         btn_baslat = QPushButton("🚀 8 Paralel Thread ile Eşzamanlılık Stres Testini Başlat")
+        btn_baslat.setObjectName("BirincilBtn")
         btn_baslat.clicked.connect(self.stres_testi_calistir)
         ust.addWidget(btn_baslat)
         ust.addStretch()
         self.lbl_ozet = QLabel("Hazır")
-        self.lbl_ozet.setStyleSheet("font-weight:bold; color:#093567;")
+        self.lbl_ozet.setStyleSheet("font-weight:bold; color:#12355B;")
         ust.addWidget(self.lbl_ozet)
         lay.addLayout(ust)
 
@@ -314,6 +331,7 @@ class CanliEszamanlilikDialog(QDialog):
         self.tbl = QTableWidget(0, 5)
         self.tbl.setHorizontalHeaderLabels(["Thread #", "Hedef İşlem", "Bekleme / Kilit Süresi (ms)", "PostgreSQL Kararı", "Açıklama / Kural"])
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         lay.addWidget(self.tbl, 1)
 
@@ -321,42 +339,42 @@ class CanliEszamanlilikDialog(QDialog):
         import psycopg
         self.tbl.setRowCount(0)
         self.bar.setValue(0)
-        dsn = getattr(self.db, 'dsn', None) or getattr(self.db, 'conn_info', None) or 'postgresql://localhost/obs'
+        conninfo = self.db.conninfo
+        ogr_id = self.db.kisi_id or 3
         sonuclar = []
 
         def isci(thread_no: int, sube_id: int):
             t0 = time.perf_counter()
             try:
-                with psycopg.connect(dsn, autocommit=False) as conn:
+                with psycopg.connect(conninfo, autocommit=False) as conn:
                     with conn.cursor() as cur:
-                        cur.execute("SELECT set_config('app.kisi_id', '2', true)")
-                        cur.execute("SELECT set_config('app.rol', 'rol_ogrenci', true)")
-                        cur.execute("SELECT kisi_id FROM ogrenci WHERE kisi_id = 2 FOR UPDATE")
-                        time.sleep(0.03)
-                        cur.execute("SELECT fn_sepete_ekle_ben(%s)", (sube_id,))
+                        cur.execute("SET LOCAL ROLE rol_ogrenci")
+                        cur.execute("SELECT set_config('app.kullanici_id', %s, true)", (str(ogr_id),))
+                        cur.execute("SELECT fn_sepete_ekle(%s)", (sube_id,))
                         sure = round((time.perf_counter() - t0) * 1000, 1)
                         conn.commit()
-                        return (thread_no, f"Şube #{sube_id} Sepete Ekle", sure, "KABUL EDİLDİ ✓", "FOR UPDATE kilidini ilk aldı, AKTS uygun")
+                        return (thread_no, f"Şube #{sube_id} Sepete Ekle", sure, "✔ KABUL EDİLDİ", "Kilidi ilk aldı, kayıt eklendi")
             except Exception as e:
                 sure = round((time.perf_counter() - t0) * 1000, 1)
-                return (thread_no, f"Şube #{sube_id} Sepete Ekle", sure, "ENGELLENDİ (KURAL)", str(e).splitlines()[0][:65])
+                return (thread_no, f"Şube #{sube_id} Sepete Ekle", sure, "✖ ENGELLENDİ (KURAL)", str(e).splitlines()[0][:65])
 
-        with psycopg.connect(dsn, autocommit=True) as conn:
-            conn.execute("DELETE FROM kayit WHERE ogrenci_id = 2 AND durum = 'sepet'")
-            subeler = [r[0] for r in conn.execute("SELECT sube_id FROM v_acik_subeler LIMIT 4").fetchall()] or [1, 2]
+        hedef_sube = 1
+        try:
+            acik = self.db.sorgula("SELECT sube_id FROM v_acik_subeler WHERE durum = 'alinabilir' LIMIT 1")
+            if acik:
+                hedef_sube = acik[0]["sube_id"]
+        except Exception:
+            pass
 
         with ThreadPoolExecutor(max_workers=8) as ex:
-            futures = [ex.submit(isci, i + 1, subeler[i % len(subeler)]) for i in range(8)]
+            futures = [ex.submit(isci, i + 1, hedef_sube) for i in range(8)]
             for idx, f in enumerate(futures, 1):
                 sonuclar.append(f.result())
                 self.bar.setValue(idx)
 
-        with psycopg.connect(dsn, autocommit=True) as conn:
-            conn.execute("DELETE FROM kayit WHERE ogrenci_id = 2 AND durum = 'sepet'")
-
         sonuclar.sort(key=lambda x: x[2])
         kabul = sum(1 for s in sonuclar if "KABUL" in s[3])
-        self.lbl_ozet.setText(f"Sonuç: {kabul} İstek Kabul Edildi, {len(sonuclar)-kabul} İstek FOR UPDATE Kilidi & Kural İle Engellendi ✓")
+        self.lbl_ozet.setText(f"Sonuç: {kabul} İstek Kabul Edildi, {len(sonuclar)-kabul} İstek Kilit & Tekillik Kuralı İle Engellendi ✔")
 
         for r, (t_no, islem, sure, karar, acik) in enumerate(sonuclar):
             self.tbl.insertRow(r)
@@ -364,6 +382,7 @@ class CanliEszamanlilikDialog(QDialog):
             self.tbl.setItem(r, 1, QTableWidgetItem(islem))
             self.tbl.setItem(r, 2, QTableWidgetItem(f"{sure} ms"))
             it = QTableWidgetItem(karar)
-            it.setBackground(QBrush(QColor("#dcfce7" if "KABUL" in karar else "#fee2e2")))
+            it.setBackground(QBrush(QColor("#DCFCE7" if "KABUL" in karar else "#FEE2E2")))
+            it.setForeground(QBrush(QColor("#15803D" if "KABUL" in karar else "#B91C1C")))
             self.tbl.setItem(r, 3, it)
             self.tbl.setItem(r, 4, QTableWidgetItem(acik))

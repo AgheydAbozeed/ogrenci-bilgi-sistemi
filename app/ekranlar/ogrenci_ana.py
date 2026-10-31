@@ -232,23 +232,20 @@ class OgrenciAnaSayfa(QWidget):
 
         profil = self.db.tek_satir(
             """SELECT o.ogrenci_no, o.giris_yili, k.ad || ' ' || k.soyad AS ad_soyad,
-                      k.eposta, p.ad AS program_ad
+                      k.eposta, p.ad AS program_ad,
+                      (SELECT kd.ad || ' ' || kd.soyad
+                         FROM danismanlik d
+                         JOIN kisi kd ON kd.kisi_id = d.danisman_id
+                        WHERE d.ogrenci_id = o.kisi_id
+                          AND d.gecerlilik @> current_date
+                        LIMIT 1) AS danisman_ad
                  FROM ogrenci o
                  JOIN kisi k ON k.kisi_id = o.kisi_id
                  LEFT JOIN mufredat m ON m.mufredat_id = o.mufredat_id
                  LEFT JOIN program p ON p.program_id = m.program_id
                 WHERE o.kisi_id = fn_oturum_kisi_id()"""
         ) or {}
-
-        danisman = self.db.tek_satir(
-            """SELECT k.ad || ' ' || k.soyad AS ad_soyad, k.eposta
-                 FROM danismanlik d
-                 JOIN kisi k ON k.kisi_id = d.danisman_id
-                WHERE d.ogrenci_id = fn_oturum_kisi_id()
-                  AND d.gecerlilik @> current_date
-                LIMIT 1"""
-        ) or {}
-        danisman_ad = danisman.get("ad_soyad") or "Atanmamış"
+        danisman_ad = profil.get("danisman_ad") or "Atanmamış"
 
         ust_w = QWidget()
         ust_lay = QHBoxLayout(ust_w)
@@ -611,8 +608,11 @@ class OgrenciDersSecimi(QWidget):
         )
 
     def yenile(self):
-        aktif_donem = (self.db.tek_satir("SELECT fn_aktif_donem_id() AS id") or {}).get("id")
-        self.aktif_limit = int((self.db.tek_satir("SELECT fn_akts_limit(fn_oturum_kisi_id()) AS lim") or {}).get("lim") or 30)
+        baglam_meta = self.db.tek_satir(
+            "SELECT fn_aktif_donem_id() AS id, fn_akts_limit(fn_oturum_kisi_id()) AS lim"
+        ) or {}
+        aktif_donem = baglam_meta.get("id")
+        self.aktif_limit = int(baglam_meta.get("lim") or 30)
 
         # Önce haftalık programdaki dolu slotları oku
         prog = self.db.sorgula("SELECT * FROM v_haftalik_program WHERE donem_id = %s", (aktif_donem,))
