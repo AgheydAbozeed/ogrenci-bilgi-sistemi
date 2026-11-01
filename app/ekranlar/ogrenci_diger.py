@@ -522,7 +522,6 @@ class OgrenciKisiselVeTakvim(QWidget):
             ("Danışman E-Posta", danisman.get("eposta") or "-"),
             ("Görev Geçerlilik Aralığı", danisman.get("aralik") or "-"),
             ("Onay Yetkisi", "Ders Seçimi Kesinleştirme & Ekle-Bırak Onayı"),
-            ("Akademik Risk Takibi", "Kural Tabanlı Bayrak + YZ (OULAD) Risk İzleme"),
         ]
         g2 = QGridLayout()
         g2.setSpacing(0)

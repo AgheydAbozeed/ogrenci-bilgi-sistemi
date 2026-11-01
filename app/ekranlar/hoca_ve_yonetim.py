@@ -261,15 +261,10 @@ class SekreterPaneli(QWidget):
         self.lay.setSpacing(12)
 
         ust = QHBoxLayout()
-        baslik = QLabel("Bölüm Sekreterliği — Danışman Atama ve Risk Hesaplama")
+        baslik = QLabel("Bölüm Sekreterliği — Danışman Atama")
         baslik.setObjectName("SayfaBaslik")
         ust.addWidget(baslik)
         ust.addStretch()
-
-        btn_risk = QPushButton("Aktif Dönem Risk Bayraklarını Yeniden Hesapla")
-        btn_risk.setObjectName("BirincilBtn")
-        btn_risk.clicked.connect(self.risk_hesapla)
-        ust.addWidget(btn_risk)
         self.lay.addLayout(ust)
 
         self.kart_lay = QHBoxLayout()
@@ -348,13 +343,6 @@ class SekreterPaneli(QWidget):
             self.yenile()
         except Exception as e:
             hata_goster(self, "Kural Engeli", e)
-
-    def risk_hesapla(self):
-        try:
-            r = self.db.calistir("SELECT fn_risk_bayrak_hesapla() AS toplam")[0]
-            QMessageBox.information(self, "Tamamlandı ✔", f"Aktif dönem için toplam {r['toplam']} risk bayrağı üretildi.")
-        except Exception as e:
-            hata_goster(self, "Hata", e)
 
 
 class YoneticiKayitEklemePaneli(QWidget):

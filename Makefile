@@ -1,7 +1,7 @@
 DB ?= obs
 VENV_PY ?= $(HOME)/.obs_venv/bin/python
 
-.PHONY: test sql-test ml gui
+.PHONY: test sql-test gui
 
 sql-test:
 	psql -d $(DB) -f tests/001_testler.sql
@@ -12,9 +12,6 @@ sql-test:
 
 test: sql-test
 	$(VENV_PY) tests/006_eszamanlilik_testi.py
-
-ml:
-	$(VENV_PY) -m ml.risk_model
 
 gui:
 	$(VENV_PY) -m app.main

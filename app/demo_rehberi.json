@@ -43,10 +43,10 @@
   },
   {
     "adim": 7,
-    "baslik": "YZ (OULAD) Akademik Risk ve Bayrak Paneli",
+    "baslik": "Danışanlarım ve Mezuniyet Denetimi",
     "rol": "rol_danisman",
     "ekran": 1,
-    "ipucu": "Danışanların kural tabanlı risk bayraklarını ve makine öğrenmesi (Lojistik Regresyon / Random Forest) risk tahmin skorlarını inceleyin."
+    "ipucu": "Aktif danışanların GNO ve AKTS durumlarını izleyin; seçili öğrencinin mezuniyet grup denetimini fn_mezuniyet_denetim_danisan() ile inceleyin."
   },
   {
     "adim": 8,
@@ -60,7 +60,7 @@
     "baslik": "Sekreterlik: EXCLUDE Korumalı Danışman Atama",
     "rol": "rol_sekreter",
     "ekran": 0,
-    "ipucu": "PostgreSQL daterange EXCLUDE kısıtı sayesinde çakışmasız danışman ataması yapın ve dönemlik risk bayraklarını hesaplatın."
+    "ipucu": "PostgreSQL daterange EXCLUDE kısıtı sayesinde çakışmasız danışman ataması yapın; eski aralık otomatik kapatılır."
   },
   {
     "adim": 10,

@@ -17,7 +17,7 @@ from app.ekranlar.ogrenci_ana import OgrenciAnaSayfa, OgrenciDersSecimi
 from app.ekranlar.ogrenci_diger import (
     OgrenciKisiselVeTakvim, OgrenciNotlarTranskript, OgrenciMezuniyetSimulasyon
 )
-from app.ekranlar.danisman_ekran import DanismanOnayKuyrugu, DanismanRiskPaneli
+from app.ekranlar.danisman_ekran import DanismanOnayKuyrugu, DanisanPaneli
 from app.ekranlar.hoca_ve_yonetim import (
     OgretimUyesiPaneli, SekreterPaneli, YoneticiPaneli, YoneticiKayitEklemePaneli
 )
@@ -594,7 +594,7 @@ class AnaPencere(QMainWindow):
         elif self.db.aktif_rol == "rol_danisman":
             sekme_listesi = [
                 ("☑️   Onay Kuyruğu (Ctrl+1)", lambda: DanismanOnayKuyrugu(self.db)),
-                ("📊   Danışanlar & YZ Risk (Ctrl+2)", lambda: DanismanRiskPaneli(self.db)),
+                ("📊   Danışanlarım (Ctrl+2)", lambda: DanisanPaneli(self.db)),
             ]
         elif self.db.aktif_rol == "rol_ogretim_uyesi":
             sekme_listesi = [
