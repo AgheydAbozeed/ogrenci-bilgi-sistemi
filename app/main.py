@@ -4,13 +4,13 @@ import json
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QPushButton, QWidget, QStackedWidget, QFrame,
-    QMessageBox, QDockWidget, QScrollArea
+    QMessageBox, QDockWidget, QScrollArea, QLineEdit
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QShortcut, QKeySequence
 from app.db import Veritabani
 from app.stil import (
-    OLCULER, stil_uret, aktif_tema_adi, tema_kaydet, aktif_palet
+    OLCULER, stil_uret, aktif_tema_adi, tema_kaydet
 )
 from app.ekranlar.db_rontgen_ve_acid import SqlRontgenDialog
 from app.ekranlar.ogrenci_ana import OgrenciAnaSayfa, OgrenciDersSecimi
@@ -18,7 +18,9 @@ from app.ekranlar.ogrenci_diger import (
     OgrenciKisiselVeTakvim, OgrenciNotlarTranskript, OgrenciMezuniyetSimulasyon
 )
 from app.ekranlar.danisman_ekran import DanismanOnayKuyrugu, DanismanRiskPaneli
-from app.ekranlar.hoca_ve_yonetim import OgretimUyesiPaneli, SekreterPaneli, YoneticiPaneli
+from app.ekranlar.hoca_ve_yonetim import (
+    OgretimUyesiPaneli, SekreterPaneli, YoneticiPaneli, YoneticiKayitEklemePaneli
+)
 
 ROL_ADLARI = {
     "rol_ogrenci": "Öğrenci",
@@ -30,11 +32,19 @@ ROL_ADLARI = {
 
 
 class GirisPenceresi(QDialog):
+    """
+    Öğrenci / Akademisyen seçmeli, 5 haneli numara + şifre ('123456') doğrulamalı
+    kurumsal giriş ekranı.
+    """
+
     def __init__(self, db: Veritabani):
         super().__init__()
         self.db = db
-        self.setWindowTitle("OBS — Kullanıcı Girişi")
-        self.setFixedSize(460, 320)
+        self.giris_turu = "ogrenci"  # 'ogrenci' veya 'akademisyen'
+        self.kullanicilar = self.db.demo_kullanicilar()
+
+        self.setWindowTitle("OBS — Kurumsal Kimlik Doğrulama")
+        self.setFixedSize(490, 460)
 
         ana = QVBoxLayout(self)
         ana.setContentsMargins(0, 0, 0, 0)
@@ -46,7 +56,7 @@ class GirisPenceresi(QDialog):
         ub_lay.setContentsMargins(24, 18, 24, 16)
         lbl_b = QLabel("ÖĞRENCİ BİLGİ SİSTEMİ PORTALI")
         lbl_b.setStyleSheet("color: #FFFFFF; font-size: 14pt; font-weight: 800; letter-spacing: 0.4px;")
-        lbl_a = QLabel("Satır Düzeyi Güvenlik (RLS) & Çok Rollü Akademik Yönetim")
+        lbl_a = QLabel("Öğrenci ve Akademisyen Merkezi Kimlik Doğrulama Sistemi")
         lbl_a.setStyleSheet("color: #93C5FD; font-size: 9.5pt;")
         ub_lay.addWidget(lbl_b)
         ub_lay.addWidget(lbl_a)
@@ -55,48 +65,204 @@ class GirisPenceresi(QDialog):
         kart = QFrame()
         kart.setObjectName("PortalKart")
         lay = QVBoxLayout(kart)
-        lay.setContentsMargins(24, 20, 24, 22)
-        lay.setSpacing(10)
+        lay.setContentsMargins(26, 20, 26, 22)
+        lay.setSpacing(12)
 
-        self.kullanicilar = self.db.demo_kullanicilar()
+        # 1) Öğrenci / Akademisyen Giriş Türü Seçim Butonları
+        tur_lay = QHBoxLayout()
+        tur_lay.setSpacing(8)
+        self.btn_tur_ogr = QPushButton("🎓  Öğrenci Girişi")
+        self.btn_tur_ogr.setMinimumHeight(38)
+        self.btn_tur_ogr.setCursor(Qt.PointingHandCursor)
+        self.btn_tur_ogr.clicked.connect(lambda: self._tur_sec("ogrenci"))
 
-        lay.addWidget(QLabel("<b>Kullanıcı Hesabı Seçin:</b>"))
-        self.cmb_kul = QComboBox()
-        self.cmb_kul.setMinimumHeight(34)
-        for k in self.kullanicilar:
-            roller_str = ", ".join(ROL_ADLARI.get(r, r) for r in (k["roller"] or []))
-            self.cmb_kul.addItem(f"{k['ad_soyad']} ({roller_str})", k)
-        self.cmb_kul.currentIndexChanged.connect(self._kullanici_degisti)
-        lay.addWidget(self.cmb_kul)
+        self.btn_tur_aka = QPushButton("👨‍🏫  Akademisyen / Personel Girişi")
+        self.btn_tur_aka.setMinimumHeight(38)
+        self.btn_tur_aka.setCursor(Qt.PointingHandCursor)
+        self.btn_tur_aka.clicked.connect(lambda: self._tur_sec("akademisyen"))
 
-        lay.addWidget(QLabel("<b>Oturum Rolü:</b>"))
+        tur_lay.addWidget(self.btn_tur_ogr, 1)
+        tur_lay.addWidget(self.btn_tur_aka, 1)
+        lay.addLayout(tur_lay)
+
+        # 2) Numara Giriş Alanı
+        self.lbl_no_baslik = QLabel("<b>Öğrenci Numarası (5 Haneli):</b>")
+        lay.addWidget(self.lbl_no_baslik)
+
+        self.txt_no = QLineEdit()
+        self.txt_no.setMinimumHeight(36)
+        self.txt_no.setMaxLength(12)
+        self.txt_no.textChanged.connect(self._numara_degisti)
+        lay.addWidget(self.txt_no)
+
+        # 3) Şifre Giriş Alanı
+        lay.addWidget(QLabel("<b>Şifre:</b>"))
+        sifre_lay = QHBoxLayout()
+        sifre_lay.setSpacing(6)
+        self.txt_sifre = QLineEdit()
+        self.txt_sifre.setMinimumHeight(36)
+        self.txt_sifre.setEchoMode(QLineEdit.Password)
+        self.txt_sifre.setPlaceholderText("Şifrenizi girin (Varsayılan: 123456)")
+        self.txt_sifre.returnPressed.connect(self.kabul)
+        sifre_lay.addWidget(self.txt_sifre, 1)
+
+        self.btn_goz = QPushButton("👁")
+        self.btn_goz.setObjectName("IkincilBtn")
+        self.btn_goz.setFixedSize(38, 36)
+        self.btn_goz.setToolTip("Şifreyi Göster / Gizle")
+        self.btn_goz.clicked.connect(self._sifre_gorunurluk_degistir)
+        sifre_lay.addWidget(self.btn_goz)
+        lay.addLayout(sifre_lay)
+
+        # 4) Akademisyenler için Oturum Rolü Seçimi (Çok rollü akademisyenlerde görünür)
+        self.rol_kap = QWidget()
+        rol_v = QVBoxLayout(self.rol_kap)
+        rol_v.setContentsMargins(0, 0, 0, 0)
+        rol_v.setSpacing(4)
+        rol_v.addWidget(QLabel("<b>Oturum Rolü:</b>"))
         self.cmb_rol = QComboBox()
         self.cmb_rol.setMinimumHeight(34)
-        lay.addWidget(self.cmb_rol)
-        self._kullanici_degisti()
+        rol_v.addWidget(self.cmb_rol)
+        lay.addWidget(self.rol_kap)
+
+        # 5) Sunum kolaylığı için hızlı hesap rehberi (Seçilince numarayı ve 123456'yı doldurur)
+        rehber_lay = QHBoxLayout()
+        lbl_rehber = QLabel("📋 Hızlı Hesap Seç:")
+        lbl_rehber.setStyleSheet("color: #475569; font-size: 9pt; font-weight: 600;")
+        rehber_lay.addWidget(lbl_rehber)
+        self.cmb_hizli = QComboBox()
+        self.cmb_hizli.setMinimumHeight(30)
+        self.cmb_hizli.currentIndexChanged.connect(self._hizli_hesap_secildi)
+        rehber_lay.addWidget(self.cmb_hizli, 1)
+        lay.addLayout(rehber_lay)
+
+        self.lbl_hata = QLabel("")
+        self.lbl_hata.setStyleSheet(
+            "background-color: #FEE2E2; color: #B91C1C; border: 1px solid #FCA5A5; "
+            "border-radius: 6px; padding: 6px 10px; font-weight: 600; font-size: 9pt;"
+        )
+        self.lbl_hata.setVisible(False)
+        lay.addWidget(self.lbl_hata)
 
         lay.addStretch()
-        btn = QPushButton("Sisteme Giriş Yap  ➔")
-        btn.setObjectName("BirincilBtn")
-        btn.setMinimumHeight(38)
-        btn.clicked.connect(self.kabul)
-        lay.addWidget(btn)
-        ana.addWidget(kart, 1)
+        btn_giris = QPushButton("Sisteme Giriş Yap  ➔")
+        btn_giris.setObjectName("BirincilBtn")
+        btn_giris.setMinimumHeight(40)
+        btn_giris.setCursor(Qt.PointingHandCursor)
+        btn_giris.clicked.connect(self.kabul)
+        lay.addWidget(btn_giris)
 
-    def _kullanici_degisti(self):
-        self.cmb_rol.clear()
-        k = self.cmb_kul.currentData()
-        if not k:
+        ana.addWidget(kart, 1)
+        self._tur_sec("ogrenci")
+
+    def _sifre_gorunurluk_degistir(self):
+        if self.txt_sifre.echoMode() == QLineEdit.Password:
+            self.txt_sifre.setEchoMode(QLineEdit.Normal)
+        else:
+            self.txt_sifre.setEchoMode(QLineEdit.Password)
+
+    def _tur_sec(self, tur: str):
+        self.giris_turu = tur
+        self.lbl_hata.setVisible(False)
+        secili_stil = (
+            "background-color: #2563EB; color: #FFFFFF; font-weight: 700; "
+            "border: 2px solid #1D4ED8; border-radius: 6px;"
+        )
+        pasif_stil = (
+            "background-color: #F1F5F9; color: #475569; font-weight: 600; "
+            "border: 1px solid #CBD5E1; border-radius: 6px;"
+        )
+        if tur == "ogrenci":
+            self.btn_tur_ogr.setStyleSheet(secili_stil)
+            self.btn_tur_aka.setStyleSheet(pasif_stil)
+            self.lbl_no_baslik.setText("<b>Öğrenci Numarası (5 Haneli — [Yıl][Bölüm][Sıra]):</b>")
+            self.txt_no.setPlaceholderText("Örn: 23101, 24101, 25102")
+            self.rol_kap.setVisible(False)
+        else:
+            self.btn_tur_aka.setStyleSheet(secili_stil)
+            self.btn_tur_ogr.setStyleSheet(pasif_stil)
+            self.lbl_no_baslik.setText("<b>Akademisyen / Personel Numarası (5 Haneli):</b>")
+            self.txt_no.setPlaceholderText("Örn: 10101 (Danışman/Hoca), 10001 (Sekreter), 10000 (Yönetici)")
+            self.rol_kap.setVisible(True)
+
+        # Hızlı seçim listesini ilgili türe göre doldur
+        self.cmb_hizli.blockSignals(True)
+        self.cmb_hizli.clear()
+        self.cmb_hizli.addItem("— Numarayı kendiniz yazın veya listeden seçin —", None)
+        uygunlar = [u for u in self.kullanicilar if u.get("giris_turu") == tur]
+        for u in uygunlar:
+            no = u.get("kullanici_no", "")
+            ad = u.get("ad_soyad", "")
+            if tur == "ogrenci":
+                prog = (u.get("program_ad") or "").replace(" (Lisans)", "")
+                etiket = f"{no} — {ad}" + (f" ({prog})" if prog else "")
+            else:
+                roller_str = ", ".join(ROL_ADLARI.get(r, r) for r in (u.get("roller") or []))
+                etiket = f"{no} — {ad} [{roller_str}]"
+            self.cmb_hizli.addItem(etiket, u)
+        self.cmb_hizli.blockSignals(False)
+
+        # İlk uygun hesabı varsayılan olarak doldur
+        if uygunlar:
+            self.cmb_hizli.setCurrentIndex(1)
+            self._hizli_hesap_secildi()
+        else:
+            self.txt_no.clear()
+            self.txt_sifre.setText("123456")
+
+    def _hizli_hesap_secildi(self):
+        u = self.cmb_hizli.currentData()
+        if not u:
             return
-        for r in (k["roller"] or []):
-            self.cmb_rol.addItem(ROL_ADLARI.get(r, r), r)
+        self.txt_no.setText(str(u.get("kullanici_no") or ""))
+        self.txt_sifre.setText("123456")
+        self._numara_degisti(self.txt_no.text())
+
+    def _numara_degisti(self, metin: str):
+        self.lbl_hata.setVisible(False)
+        k_no = metin.strip()
+        self.cmb_rol.clear()
+        eslesen = next(
+            (
+                u for u in self.kullanicilar
+                if str(u.get("kullanici_no")) == k_no and u.get("giris_turu") == self.giris_turu
+            ),
+            None
+        )
+        if eslesen:
+            for r in (eslesen.get("roller") or []):
+                self.cmb_rol.addItem(ROL_ADLARI.get(r, r), r)
+        elif self.giris_turu == "akademisyen":
+            for r_kod in ("rol_danisman", "rol_ogretim_uyesi", "rol_sekreter", "rol_yonetici"):
+                self.cmb_rol.addItem(ROL_ADLARI[r_kod], r_kod)
 
     def kabul(self):
-        k = self.cmb_kul.currentData()
-        rol = self.cmb_rol.currentData()
-        if not k or not rol:
+        try:
+            kullanici = self.db.kimlik_dogrula(
+                self.giris_turu,
+                self.txt_no.text(),
+                self.txt_sifre.text()
+            )
+        except ValueError as e:
+            self.lbl_hata.setText(f"✖  {e}")
+            self.lbl_hata.setVisible(True)
             return
-        self.db.oturum_ayarla(k["kisi_id"], k["ad_soyad"], k["roller"], rol)
+
+        roller = kullanici.get("roller") or []
+        if self.giris_turu == "ogrenci":
+            secili_rol = "rol_ogrenci"
+        else:
+            secili_rol = self.cmb_rol.currentData()
+            if not secili_rol or secili_rol not in roller:
+                secili_rol = roller[0] if roller else "rol_ogretim_uyesi"
+
+        self.db.oturum_ayarla(
+            kullanici["kisi_id"],
+            kullanici["ad_soyad"],
+            roller,
+            secili_rol,
+            str(kullanici.get("kullanici_no") or "")
+        )
         self.accept()
 
 
@@ -188,7 +354,6 @@ class AnaPencere(QMainWindow):
         self.db = db
         self.setWindowTitle("Öğrenci Bilgi Sistemi (OBS)")
 
-        # Tasarım Sistemi: Asgari pencere genişliği 1100 px, yüksekliği 700 px
         self.setMinimumSize(
             OLCULER["asgari_pencere_genislik"],
             OLCULER["asgari_pencere_yukseklik"]
@@ -208,7 +373,6 @@ class AnaPencere(QMainWindow):
         ana_lay.setContentsMargins(0, 0, 0, 0)
         ana_lay.setSpacing(0)
 
-        # Sol Menü: Genişlik 220 px (#12355B lacivert)
         self.sol_menu = QFrame()
         self.sol_menu.setObjectName("SolMenu")
         self.sol_menu.setFixedWidth(OLCULER["menu_genislik"])
@@ -247,7 +411,6 @@ class AnaPencere(QMainWindow):
         self.menu_lay.setSpacing(4)
         sol_ana_lay.addLayout(self.menu_lay, 1)
 
-        # Sol menü altında klavye kısayolları bilgi kartı
         kisayol_lbl = QLabel(
             "⌨️ <b>Kısayollar:</b><br>"
             "• Ctrl+1…6 : Ekranlara geç<br>"
@@ -310,7 +473,6 @@ class AnaPencere(QMainWindow):
         sag_govde.addWidget(self.icerik, 1)
         ana_lay.addLayout(sag_govde, 1)
 
-        # Sunum Modu: Sağda QDockWidget (Demo Rehberi)
         self.demo_dock = DemoRehberiDock(self)
         self.addDockWidget(Qt.RightDockWidgetArea, self.demo_dock)
 
@@ -319,13 +481,6 @@ class AnaPencere(QMainWindow):
         self.ekranlari_kur()
 
     def _kisayollari_kur(self):
-        """
-        Tasarım Sistemi Klavye Kısayolları:
-        - Ctrl+1 … Ctrl+6 : Ekranlara geç
-        - F5 : Yenile
-        - Ctrl+Enter : Kesinleştir
-        - Esc : İletişim kutusunu kapat / filtreyi temizle
-        """
         self._kisayollar = []
         for i in range(1, 7):
             sc = QShortcut(QKeySequence(f"Ctrl+{i}"), self)
@@ -381,16 +536,10 @@ class AnaPencere(QMainWindow):
         self.demo_dock.setVisible(not self.demo_dock.isVisible())
 
     def demo_adimina_git(self, hedef_rol: str, hedef_ekran: int):
-        """
-        Demo rehberindeki 'Git ➔' düğmesine basıldığında doğru kullanıcıya,
-        role ve ekrana otomatik geçirir.
-        """
         if self.db.aktif_rol != hedef_rol:
-            # Mevcut kullanıcının bu rolü varsa doğrudan rol değiştir
             if hedef_rol in (self.db.roller or []):
                 self.db.aktif_rol = hedef_rol
             else:
-                # Demo kullanıcıları arasından bu role sahip ilk kullanıcıya geç
                 kullanicilar = self.db.demo_kullanicilar()
                 hedef_kul = next(
                     (k for k in kullanicilar if hedef_rol in (k["roller"] or [])),
@@ -401,7 +550,8 @@ class AnaPencere(QMainWindow):
                         hedef_kul["kisi_id"],
                         hedef_kul["ad_soyad"],
                         hedef_kul["roller"],
-                        hedef_rol
+                        hedef_rol,
+                        str(hedef_kul.get("kullanici_no") or "")
                     )
             self.ekranlari_kur()
         self.sekme_sec(hedef_ekran)
@@ -411,7 +561,8 @@ class AnaPencere(QMainWindow):
         bas_harf = "".join([x[0] for x in self.db.ad_soyad.split()[:2]]).upper()
         self.lbl_sol_avatar.setText(bas_harf or "OB")
         self.lbl_sol_isim.setText(self.db.ad_soyad)
-        self.lbl_sol_rol.setText(rol_ad)
+        no_bilgi = f" ({self.db.kullanici_no})" if getattr(self.db, "kullanici_no", "") else ""
+        self.lbl_sol_rol.setText(f"{rol_ad}{no_bilgi}")
 
         self.cmb_rol_degis.blockSignals(True)
         self.cmb_rol_degis.clear()
@@ -434,38 +585,43 @@ class AnaPencere(QMainWindow):
 
         if self.db.aktif_rol == "rol_ogrenci":
             sekme_listesi = [
-                ("⚙️   Ana Görünüm (Ctrl+1)", OgrenciAnaSayfa(self.db, self.sekme_sec)),
-                ("📝   Ders Kayıt İşlemleri (Ctrl+2)", OgrenciDersSecimi(self.db)),
-                ("A+   Not Bilgileri (Ctrl+3)", OgrenciNotlarTranskript(self.db)),
-                ("🎓   Mezuniyet & DAG (Ctrl+4)", OgrenciMezuniyetSimulasyon(self.db)),
-                ("👤   Kişisel & Takvim (Ctrl+5)", OgrenciKisiselVeTakvim(self.db)),
+                ("⚙️   Ana Görünüm (Ctrl+1)", lambda: OgrenciAnaSayfa(self.db, self.sekme_sec)),
+                ("📝   Ders Kayıt İşlemleri (Ctrl+2)", lambda: OgrenciDersSecimi(self.db)),
+                ("A+   Not Bilgileri (Ctrl+3)", lambda: OgrenciNotlarTranskript(self.db)),
+                ("🎓   Mezuniyet & DAG (Ctrl+4)", lambda: OgrenciMezuniyetSimulasyon(self.db)),
+                ("👤   Kişisel & Takvim (Ctrl+5)", lambda: OgrenciKisiselVeTakvim(self.db)),
             ]
         elif self.db.aktif_rol == "rol_danisman":
             sekme_listesi = [
-                ("☑️   Onay Kuyruğu (Ctrl+1)", DanismanOnayKuyrugu(self.db)),
-                ("📊   Danışanlar & YZ Risk (Ctrl+2)", DanismanRiskPaneli(self.db)),
+                ("☑️   Onay Kuyruğu (Ctrl+1)", lambda: DanismanOnayKuyrugu(self.db)),
+                ("📊   Danışanlar & YZ Risk (Ctrl+2)", lambda: DanismanRiskPaneli(self.db)),
             ]
         elif self.db.aktif_rol == "rol_ogretim_uyesi":
             sekme_listesi = [
-                ("👨‍🏫   Şubelerim, Not & Yoklama", OgretimUyesiPaneli(self.db)),
+                ("👨‍🏫   Şubelerim, Not & Yoklama", lambda: OgretimUyesiPaneli(self.db)),
             ]
         elif self.db.aktif_rol == "rol_sekreter":
             sekme_listesi = [
-                ("🗂️   Sekreterlik İşlemleri", SekreterPaneli(self.db)),
+                ("🗂️   Sekreterlik İşlemleri", lambda: SekreterPaneli(self.db)),
             ]
         elif self.db.aktif_rol == "rol_yonetici":
             sekme_listesi = [
-                ("🛡️   Parametre & Denetim Logu", YoneticiPaneli(self.db)),
+                ("🛡️   Parametre & Denetim Logu (Ctrl+1)", lambda: YoneticiPaneli(self.db, self.sekme_sec)),
+                ("🏛️   Öğrenci / Hoca / Ders Ekle (Ctrl+2)", lambda: YoneticiKayitEklemePaneli(self.db)),
             ]
         else:
             sekme_listesi = []
 
-        for idx, (etiket, widget) in enumerate(sekme_listesi):
+        self._sekme_fabrikalari = []
+        for idx, (etiket, fabrika) in enumerate(sekme_listesi):
             btn = QPushButton(etiket)
             btn.clicked.connect(lambda _, i=idx: self.sekme_sec(i))
             self.menu_lay.addWidget(btn)
             self.menu_butonlari.append(btn)
-            self.icerik.addWidget(widget)
+            self._sekme_fabrikalari.append(fabrika)
+            yer_tutucu = QWidget()
+            yer_tutucu.setProperty("_yer_tutucu", True)
+            self.icerik.addWidget(yer_tutucu)
 
         self.menu_lay.addStretch()
         if self.menu_butonlari:
@@ -479,7 +635,12 @@ class AnaPencere(QMainWindow):
             b.style().unpolish(b)
             b.style().polish(b)
         w = self.icerik.widget(idx)
-        if hasattr(w, "yenile"):
+        if w.property("_yer_tutucu"):
+            gercek_w = self._sekme_fabrikalari[idx]()
+            self.icerik.insertWidget(idx, gercek_w)
+            self.icerik.removeWidget(w)
+            w.deleteLater()
+        elif hasattr(w, "yenile"):
             w.yenile()
         self.icerik.setCurrentIndex(idx)
 
