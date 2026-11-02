@@ -202,12 +202,7 @@ CREATE POLICY danismanlik_danisman ON danismanlik FOR SELECT TO rol_danisman
 DROP POLICY IF EXISTS danismanlik_yonetim ON danismanlik;
 CREATE POLICY danismanlik_yonetim ON danismanlik FOR SELECT TO rol_sekreter, rol_yonetici USING (true);
 
--- I) risk_bayrak ve risk_tahmin (YALNIZ danisman kendi danisanlarini gorur; ogrenci asla goremez)
-ALTER TABLE risk_bayrak ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS risk_bayrak_danisman ON risk_bayrak;
-CREATE POLICY risk_bayrak_danisman ON risk_bayrak FOR SELECT TO rol_danisman
-  USING (fn_rls_danisani_mi(ogrenci_id));
-
+-- I) risk_tahmin (YALNIZ danisman kendi danisanlarini gorur; ogrenci asla goremez)
 ALTER TABLE risk_tahmin ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS risk_tahmin_danisman ON risk_tahmin;
 CREATE POLICY risk_tahmin_danisman ON risk_tahmin FOR SELECT TO rol_danisman
@@ -267,7 +262,7 @@ TO rol_ogretim_uyesi;
 GRANT EXECUTE ON FUNCTION
   fn_donem_ac(smallint, text, timestamptz, timestamptz, timestamptz, timestamptz),
   fn_sube_ac(int, int, smallint, int), fn_sube_saat_ekle(int, smallint, smallint),
-  fn_danisman_ata(int, int, date), fn_risk_bayrak_hesapla(int)
+  fn_danisman_ata(int, int, date)
 TO rol_sekreter, rol_yonetici;
 
 GRANT EXECUTE ON FUNCTION

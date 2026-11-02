@@ -41,9 +41,6 @@ BEGIN
   PERFORM set_config('test.yonetici', (SELECT kisi_id::text FROM kisi WHERE eposta = 'yonetici@ornek.edu'), true);
 END $$;
 
--- Risk bayraklarini uretelim (Bora icin bayrak olussun)
-SELECT fn_risk_bayrak_hesapla() INTO pg_temp.dummy_risk;
-
 -- 1) obs_login rolu: yalnizca v_demo_kullanicilar okuyabilir, kayit tablosunu okuyamaz
 SET LOCAL ROLE obs_login;
 SELECT pg_temp.esit_bekle('obs_login: v_demo_kullanicilar okur',
@@ -59,8 +56,6 @@ SELECT pg_temp.esit_bekle('Ogrenci (Bora): v_kayitlarim yalniz kendi 3 kaydini g
   $q$SELECT count(*)::text FROM v_kayitlarim$q$, '3');
 SELECT pg_temp.esit_bekle('Ogrenci (Bora): Cem in kayitlarini goremez (0 satir)',
   $q$SELECT count(*)::text FROM kayit WHERE ogrenci_id = current_setting('test.ogr_cem')::int$q$, '0');
-SELECT pg_temp.esit_bekle('Ogrenci (Bora): kendi risk bayraklarini bile goremez (0 satir)',
-  $q$SELECT count(*)::text FROM risk_bayrak$q$, '0');
 SELECT pg_temp.esit_bekle('Ogrenci (Bora): denetim_log goremez (0 satir)',
   $q$SELECT count(*)::text FROM v_denetim_log$q$, '0');
 SELECT pg_temp.hata_bekle('Ogrenci: kayit tablosuna dogrudan INSERT yapamaz',
@@ -71,14 +66,10 @@ SET LOCAL ROLE rol_danisman;
 SELECT set_config('app.kullanici_id', current_setting('test.hoca1'), true);
 SELECT pg_temp.esit_bekle('Danisman (hoca1): danisanlarinin 7 kaydini gorur',
   $q$SELECT count(*)::text FROM v_kayitlarim$q$, '7');
-SELECT pg_temp.esit_bekle('Danisman (hoca1): Bora nin risk bayraklarini gorur',
-  $q$SELECT (count(*) > 0)::text FROM v_danisan_bayraklari WHERE ogrenci_id = current_setting('test.ogr_bora')::int$q$, 'true');
 
 SELECT set_config('app.kullanici_id', current_setting('test.hoca2'), true);
 SELECT pg_temp.esit_bekle('Danisman (hoca2 - danisani yok): 0 kayit gorur',
   $q$SELECT count(*)::text FROM v_kayitlarim$q$, '0');
-SELECT pg_temp.esit_bekle('Danisman (hoca2 - danisani yok): 0 risk bayragi gorur',
-  $q$SELECT count(*)::text FROM v_danisan_bayraklari$q$, '0');
 
 -- 4) rol_ogretim_uyesi: hoca2 yalniz kendi subelerindeki (MAT101, MAT102) 3 kaydi gorur
 SET LOCAL ROLE rol_ogretim_uyesi;

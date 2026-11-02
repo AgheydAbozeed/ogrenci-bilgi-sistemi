@@ -250,7 +250,7 @@ CREATE TABLE yoklama (
 );
 
 -- ---------------------------------------------------------------------
--- 6) DENETIM, BELGE, RISK
+-- 6) DENETIM, BELGE, AI MODEL
 -- ---------------------------------------------------------------------
 CREATE TABLE denetim_log (
   log_id      bigserial PRIMARY KEY,
@@ -272,21 +272,6 @@ CREATE TABLE belge (
   uretim_zamani  timestamptz NOT NULL DEFAULT now(),
   dogrulama_kodu varchar(16) NOT NULL UNIQUE,
   icerik_hash    text        NOT NULL
-);
-
-CREATE TABLE risk_kural (
-  kod      varchar(30) PRIMARY KEY,
-  aciklama text     NOT NULL,
-  siddet   smallint NOT NULL CHECK (siddet BETWEEN 1 AND 3)
-);
-
-CREATE TABLE risk_bayrak (
-  bayrak_id  serial PRIMARY KEY,
-  ogrenci_id int         NOT NULL REFERENCES ogrenci(kisi_id),
-  donem_id   int         NOT NULL REFERENCES donem(donem_id),
-  kural_kod  varchar(30) NOT NULL REFERENCES risk_kural(kod),
-  zaman      timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (ogrenci_id, donem_id, kural_kod)
 );
 
 CREATE TABLE model_surum (
@@ -314,7 +299,6 @@ CREATE INDEX ix_kayit_ogrenci     ON kayit (ogrenci_id, donem_id);
 CREATE INDEX ix_kayit_sube        ON kayit (sube_id);
 CREATE INDEX ix_sube_donem        ON sube (donem_id, ders_id);
 CREATE INDEX ix_not_bilesen       ON not_kaydi (bilesen_id);
-CREATE INDEX ix_risk_bayrak_ogr   ON risk_bayrak (ogrenci_id, donem_id);
 CREATE INDEX ix_risk_tahmin_ogr   ON risk_tahmin (ogrenci_id, donem_id);
 CREATE INDEX ix_denetim_tablo_pk  ON denetim_log (tablo, kayit_pk);
 CREATE INDEX ix_danismanlik_danis ON danismanlik (danisman_id);

@@ -262,32 +262,11 @@ SELECT k.kayit_id, k.ogrenci_id, o.ogrenci_no, kk.ad || ' ' || kk.soyad AS ad_so
 
 CREATE OR REPLACE VIEW v_danisanlarim WITH (security_invoker = true) AS
 SELECT o.kisi_id AS ogrenci_id, o.ogrenci_no, kk.ad || ' ' || kk.soyad AS ad_soyad,
-       g.gno, coalesce(g.gecilen_akts, 0)::int AS gecilen_akts,
-       coalesce(ro.bayrak_sayisi, 0)::int AS bayrak_sayisi,
-       coalesce(ro.en_yuksek_siddet, 0)::int AS en_yuksek_siddet,
-       rt.skor AS risk_skoru
+       g.gno, coalesce(g.gecilen_akts, 0)::int AS gecilen_akts
   FROM ogrenci o
   JOIN kisi kk ON kk.kisi_id = o.kisi_id
   JOIN danismanlik dn ON dn.ogrenci_id = o.kisi_id AND dn.gecerlilik @> current_date
-  LEFT JOIN v_gno g ON g.ogrenci_id = o.kisi_id
-  LEFT JOIN v_risk_ozet ro ON ro.ogrenci_id = o.kisi_id AND ro.donem_id = fn_aktif_donem_id()
-  LEFT JOIN LATERAL (
-    SELECT skor FROM risk_tahmin r
-     WHERE r.ogrenci_id = o.kisi_id AND r.donem_id = fn_aktif_donem_id()
-     ORDER BY r.hesap_zamani DESC LIMIT 1
-  ) rt ON true;
-
-CREATE OR REPLACE VIEW v_danisan_bayraklari WITH (security_invoker = true) AS
-SELECT rb.ogrenci_id, rb.kural_kod, rk.aciklama, rk.siddet
-  FROM risk_bayrak rb
-  JOIN risk_kural rk ON rk.kod = rb.kural_kod
- WHERE rb.donem_id = fn_aktif_donem_id();
-
-CREATE OR REPLACE VIEW v_danisan_risk WITH (security_invoker = true) AS
-SELECT rt.ogrenci_id, rt.skor, rt.ozellikler, ms.ad AS model, rt.hesap_zamani
-  FROM risk_tahmin rt
-  JOIN model_surum ms ON ms.model_id = rt.model_id
- WHERE rt.donem_id = fn_aktif_donem_id();
+  LEFT JOIN v_gno g ON g.ogrenci_id = o.kisi_id;
 
 -- Ogretim uyesi gorunumleri
 CREATE OR REPLACE VIEW v_sube_listem WITH (security_invoker = true) AS

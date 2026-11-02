@@ -2,7 +2,6 @@
 -- sql/iskeletler.sql -- Kalan asamalar icin TEST EDILMIS baslangic iskeletleri
 -- On kosul: 001..004 yuklu.  Tekrar calistirilabilir (idempotent).
 -- Bu dosya TAMAMLANMIS asama degildir; docs/UYGULAMA_PLANI.md hangi kisimlarin yazilacagini soyler.
---   Asama A (risk)  : fn_risk_bayrak_hesapla  -> TODO: 4 kural daha + v_risk_ozet
 --   Asama B (API)   : fn_sepete_ekle ornegi   -> TODO: docs/VERITABANI_API_VE_EKRANLAR.md'deki fonksiyonlar
 --   Asama D (demo)  : kilitlenme, geri alma, explain -> TODO: akts hazirlama, indeks demosu
 --   Asama E (AI)    : v_risk_ozellik          -> model bu gorunumden beslenir
@@ -37,45 +36,6 @@ SELECT k.kayit_id, k.ogrenci_id, k.donem_id,
   (SELECT avg(y.katildi::int) FROM yoklama y WHERE y.kayit_id = k.kayit_id)               AS katilim_orani
 FROM kayit k JOIN donem dn ON dn.donem_id = k.donem_id
 WHERE k.durum IN ('onay_bekliyor','onayli');
-
--- ---------------------------------------------------------------------
--- Asama A: risk bayraklari (ilk iki kural hazir; digerleri plan dosyasinda)
--- ---------------------------------------------------------------------
-INSERT INTO parametre (anahtar, deger, aciklama) VALUES
-  ('risk_gno_esigi', '2.00', 'GNO bu degerin altindaysa GNO_ESIK_ALTI bayragi')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO risk_kural (kod, aciklama, siddet) VALUES
-  ('GNO_ESIK_ALTI', 'GNO risk esiginin altinda', 2),
-  ('ZORUNLU_FF',    'Zorunlu derste basarisiz ve bu donem tekrar kaydi yok', 2)
-ON CONFLICT DO NOTHING;
-
-CREATE OR REPLACE FUNCTION fn_risk_bayrak_hesapla(p_donem int) RETURNS int LANGUAGE plpgsql AS $$
-BEGIN
-  DELETE FROM risk_bayrak WHERE donem_id = p_donem;
-
-  INSERT INTO risk_bayrak (ogrenci_id, donem_id, kural_kod)
-  SELECT o.kisi_id, p_donem, 'GNO_ESIK_ALTI'
-    FROM ogrenci o
-   WHERE o.durum = 'aktif'
-     AND fn_gno(o.kisi_id) < (SELECT deger::numeric FROM parametre WHERE anahtar = 'risk_gno_esigi')
-  ON CONFLICT DO NOTHING;
-
-  INSERT INTO risk_bayrak (ogrenci_id, donem_id, kural_kod)
-  SELECT DISTINCT s.ogrenci_id, p_donem, 'ZORUNLU_FF'
-    FROM v_gecerli_sonuc s
-    JOIN ogrenci o ON o.kisi_id = s.ogrenci_id AND o.durum = 'aktif'
-    JOIN mufredat_ders md ON md.mufredat_id = o.mufredat_id AND md.ders_id = s.ders_id AND md.tur = 'zorunlu'
-   WHERE s.durum = 'kaldi'
-     AND NOT EXISTS (SELECT 1 FROM kayit k
-                      WHERE k.ogrenci_id = s.ogrenci_id AND k.ders_id = s.ders_id
-                        AND k.donem_id = p_donem AND k.durum IN ('sepet','onay_bekliyor','onayli'))
-  ON CONFLICT DO NOTHING;
-
-  -- TODO (Asama A): AKTS_GERIDE, DEVAMSIZLIK, ONKOSUL_BLOKAJI, DERS_BIRAKMA
-
-  RETURN (SELECT count(*) FROM risk_bayrak WHERE donem_id = p_donem)::int;
-END $$;
 
 -- ---------------------------------------------------------------------
 -- Asama D: demolar

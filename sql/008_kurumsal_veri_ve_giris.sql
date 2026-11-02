@@ -314,7 +314,7 @@ WHERE o.ogrenci_no NOT IN ('25102', '25103', '25204')
   );
 
 -- Gecmis donem sonuclarini ogrenci profiline gore uret
--- Riskli profiller: 23103 (Mehmet Kaya) ve 24103 (Selin Koc) -> dusuk notlar (DD, DC, FD, FF)
+-- Dusuk notlu profiller: 23103 (Mehmet Kaya) ve 24103 (Selin Koc) -> dusuk notlar (DD, DC, FD, FF)
 -- Basarili profiller: 23101 (Ali Veli), 24101 (Elif Yildiz), 24305 (Derya Arslan) -> yuksek notlar (AA, BA, BB)
 -- Diger ogrenciler -> dengeli notlar (BB, CB, CC, BA)
 INSERT INTO kayit_sonuc (kayit_id, ortalama_puan, harf, durum)
@@ -492,6 +492,3 @@ GRANT SELECT ON v_demo_kullanicilar TO obs_login, rol_ogrenci, rol_danisman, rol
 
 SET LOCAL session_replication_role = origin;
 COMMIT;
-
--- Risk bayraklarini guncelle
-SELECT fn_risk_bayrak_hesapla();
