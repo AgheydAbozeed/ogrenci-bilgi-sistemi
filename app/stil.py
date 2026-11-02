@@ -29,6 +29,12 @@ ACIK_PALET = {
     "hata_metin": "#B91C1C",
     "hata_zemin": "#FEE2E2",
     "zebra_zemin": "#F4F7FB",
+    "ai_dugme": "#7C3AED",
+    "ai_dugme_hover": "#6D28D9",
+    "ai_dugme_metin": "#FFFFFF",
+    "ai_rozet_metin": "#5B21B6",
+    "ai_rozet_zemin": "#F5F3FF",
+    "ai_kenar": "#C4B5FD",
 }
 
 KOYU_PALET = {
@@ -56,6 +62,12 @@ KOYU_PALET = {
     "hata_metin": "#F87171",
     "hata_zemin": "#0B1220",
     "zebra_zemin": "#162038",
+    "ai_dugme": "#A78BFA",
+    "ai_dugme_hover": "#8B5CF6",
+    "ai_dugme_metin": "#0B1220",
+    "ai_rozet_metin": "#A78BFA",
+    "ai_rozet_zemin": "#0B1220",
+    "ai_kenar": "#6D28D9",
 }
 
 # Ölçü ve Yerleşim Sabitleri
@@ -385,6 +397,44 @@ QPushButton#IkincilBtn, QPushButton#UstBarBtn {{
 QPushButton#IkincilBtn:hover, QPushButton#UstBarBtn:hover {{
     border: 1px solid {p['vurgu']};
     background-color: {p['zebra_zemin']};
+}}
+QPushButton#AIDugme {{
+    background-color: {p['ai_dugme']};
+    color: {p['ai_dugme_metin']};
+    border: none;
+    border-radius: {OLCULER['dugme_yaricap']}px;
+    padding: 6px 14px;
+    font-weight: 700;
+}}
+QPushButton#AIDugme:hover {{
+    background-color: {p['ai_dugme_hover']};
+}}
+QPushButton#AIDugme:disabled {{
+    background-color: {p['kenarlik']};
+    color: {p['ikincil_metin']};
+}}
+QLabel#AIRozet {{
+    background-color: {p['ai_rozet_zemin']};
+    color: {p['ai_rozet_metin']};
+    border: 1px solid {p['ai_kenar']};
+    border-radius: 9px;
+    padding: 2px 9px;
+    font-weight: 700;
+    font-size: 8.5pt;
+}}
+QLabel#AIDemoEtiket {{
+    background-color: {p['uyari_zemin']};
+    color: {p['uyari_metin']};
+    border: 1px solid {p['kenarlik']};
+    border-radius: 9px;
+    padding: 2px 8px;
+    font-weight: 700;
+    font-size: 8pt;
+}}
+QFrame#AIKart {{
+    background-color: {p['kart_zemin']};
+    border: 1px solid {p['ai_kenar']};
+    border-radius: {OLCULER['kart_yaricap']}px;
 }}
 QLineEdit, QComboBox, QSpinBox {{
     background-color: {p['kart_zemin']};
