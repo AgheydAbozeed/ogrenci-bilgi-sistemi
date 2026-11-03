@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+from app.ai.sablon_motor import (
+    NIYET_SABLONLARI,
+    AsistanYaniti,
+    NiyetSablonu,
+    SablonSorguMotoru,
+    niyet_siniflandir,
+    rol_ornek_sorulari,
+)
 from app.ai.sql_koruma import (
     ROL_IZINLI_FONKSIYONLAR,
     ROL_IZINLI_GORUNUMLER,
@@ -27,6 +35,12 @@ __all__ = [
     "SqlGuvenlikHatasi",
     "guvenli_sorgu_calistir",
     "sql_dogrula",
+    "NIYET_SABLONLARI",
+    "AsistanYaniti",
+    "NiyetSablonu",
+    "SablonSorguMotoru",
+    "niyet_siniflandir",
+    "rol_ornek_sorulari",
 ]
 
 _KIMLIK_SEMBOLLERI = {

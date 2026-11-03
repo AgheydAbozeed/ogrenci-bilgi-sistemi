@@ -3,6 +3,7 @@ tests/007_ai_sql_guvenlik_testi.py — AI NL→SQL beyaz liste ve salt-okunur ko
 """
 import unittest
 
+from app.ai.sablon_motor import NIYET_SABLONLARI, niyet_siniflandir
 from app.ai.sql_koruma import SemaKatalogu, SqlGuvenlikHatasi, sql_dogrula
 
 
@@ -41,6 +42,23 @@ class TestAiSqlGuvenlik(unittest.TestCase):
     def test_katalog_rolleri_tanimli(self):
         for rol in ("rol_ogrenci", "rol_danisman", "rol_ogretim_uyesi", "rol_sekreter", "rol_yonetici"):
             self.assertTrue(len(SemaKatalogu.izinli_kaynaklar(rol)) > 0)
+
+    def test_tum_sablonlar_beyaz_listeden_gecer(self):
+        for sablon in NIYET_SABLONLARI:
+            sql, _ = sablon.sql_uret(sablon.ornek_soru)
+            for rol in sablon.roller:
+                self.assertEqual(sql_dogrula(sql, rol), sql)
+
+    def test_temel_sorular_dogru_niyete_eslenir(self):
+        s1, g1 = niyet_siniflandir("GNO'su 2'nin altındaki danışanlarım kimler?", "rol_danisman")
+        self.assertEqual(s1.kod, "danisman_dusuk_gno")
+        self.assertGreaterEqual(g1, 80)
+
+        s2, _ = niyet_siniflandir("Bu dönem hangi dersleri alabilirim?", "rol_ogrenci")
+        self.assertEqual(s2.kod, "ogrenci_alinabilir_dersler")
+
+        s3, _ = niyet_siniflandir("Ne zaman mezun olurum?", "rol_ogrenci")
+        self.assertEqual(s3.kod, "ogrenci_mezuniyet_zamani")
 
 
 if __name__ == "__main__":
