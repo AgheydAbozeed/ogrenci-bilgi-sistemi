@@ -86,13 +86,13 @@ def _ozet_ogrenci_alinabilir(satirlar: list[dict], _p: dict) -> tuple[str, str]:
 def _ozet_ogrenci_mezuniyet(satirlar: list[dict], _p: dict) -> tuple[str, str]:
     if not satirlar:
         return (
-            "Mezuniyet simülasyonu için dönem planı kaydı bulunamadı.",
-            "Müfredat ve transkript durumunuzu mezuniyet ekranından kontrol edebilirsiniz.",
+            "Kalan zorunlu dersiniz bulunmuyor; mezuniyet ders planınız tamamlanmış görünüyor.",
+            "Müfredat grup denetimini ve GNO koşulunu mezuniyet ekranından kontrol edebilirsiniz.",
         )
-    son_donem = max(int(s.get("donem_no") or 1) for s in satirlar)
+    son_donem = max(int(s.get("donem_sira") or 1) for s in satirlar)
     toplam_akts = sum(int(s.get("akts") or 0) for s in satirlar)
-    c1 = f"En erken mezuniyet simülasyonuna göre kalan derslerinizi {son_donem} dönemde ({len(satirlar)} ders, {toplam_akts} AKTS) tamamlayabilirsiniz."
-    c2 = "Bu tahmin önkoşul zincirleri ve dönemlik AKTS tavanı dikkate alınarak hesaplanmıştır; kesin kayıt danışman onayına tabidir."
+    c1 = f"En erken mezuniyet simülasyonuna göre kalan zorunlu derslerinizi {son_donem} dönemde ({len(satirlar)} ders, toplam {toplam_akts} AKTS) tamamlayabilirsiniz."
+    c2 = "Bu plan önkoşul zincirleri (DAG kritik yolu) ve dönemlik AKTS tavanı dikkate alınarak hesaplanmıştır."
     return c1, c2
 
 
@@ -289,9 +289,9 @@ NIYET_SABLONLARI: list[NiyetSablonu] = [
             ("biter", 3),
         ],
         sql_uret=lambda _soru: (
-            "SELECT donem_no, ders_id, kod, ad, akts "
-            "FROM fn_en_erken_mezuniyet_ben() "
-            "ORDER BY donem_no ASC, kod ASC",
+            "SELECT donem_sira, ders_kod, ders_ad, akts "
+            "FROM fn_ders_plani_ben() "
+            "ORDER BY donem_sira ASC, ders_kod ASC",
             {},
         ),
         ozet_uret=_ozet_ogrenci_mezuniyet,
@@ -527,14 +527,6 @@ class SablonSorguMotoru:
         return rol_ornek_sorulari(rol)
 
     def _aktif_model_adi(self) -> str:
-        try:
-            satir = self.db.tek_satir(
-                "SELECT ad FROM model_surum ORDER BY egitim_zamani DESC LIMIT 1"
-            )
-            if satir and satir.get("ad"):
-                return str(satir["ad"])
-        except Exception:
-            pass
         return self.model_surum
 
     def yanitla(self, soru: str) -> AsistanYaniti:

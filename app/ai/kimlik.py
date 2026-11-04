@@ -23,6 +23,8 @@ def ai_rozet_metni(
 ) -> str:
     """'✦ AI · model v1 · güven %72' biçiminde standart rozet metni üretir."""
     temiz_model = (model or VARSAYILAN_MODEL_SURUM).strip()
+    if len(temiz_model) > 12:
+        temiz_model = VARSAYILAN_MODEL_SURUM
     metin = f"✦ AI · {temiz_model}"
     if guven is not None:
         yuzde = max(0, min(100, int(round(float(guven)))))
@@ -60,12 +62,18 @@ class AIRozet(QLabel):
     ):
         super().__init__(ai_rozet_metni(model, guven), parent)
         self.setObjectName("AIRozet")
-        self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setAlignment(Qt.AlignCenter)
         self.setToolTip(
             "Bu çıktı yapay zekâ tarafından öneri amacıyla üretilmiştir; "
             "nihai karar veritabanı kurallarına ve danışmana aittir."
         )
+        self._boyut_guncelle()
+
+    def _boyut_guncelle(self):
+        genislik = self.fontMetrics().horizontalAdvance(self.text()) + 22
+        self.setMinimumWidth(genislik)
+        self.setFixedHeight(24)
 
     def guncelle(
         self,
@@ -73,6 +81,7 @@ class AIRozet(QLabel):
         guven: int | float | None = None,
     ):
         self.setText(ai_rozet_metni(model, guven))
+        self._boyut_guncelle()
 
 
 class AIDemoEtiket(QLabel):
@@ -81,12 +90,15 @@ class AIDemoEtiket(QLabel):
     def __init__(self, metin: str = "demo verisi", parent: QWidget | None = None):
         super().__init__(metin, parent)
         self.setObjectName("AIDemoEtiket")
-        self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setAlignment(Qt.AlignCenter)
         self.setToolTip(
             "Veriler sentetiktir (demo verisi). AI yalnızca öneri sunar, "
             "otomatik akademik karar vermez."
         )
+        genislik = self.fontMetrics().horizontalAdvance(metin) + 20
+        self.setMinimumWidth(genislik)
+        self.setFixedHeight(24)
 
 
 class AIDugme(QPushButton):

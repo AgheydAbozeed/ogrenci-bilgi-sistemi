@@ -41,6 +41,9 @@ __all__ = [
     "SablonSorguMotoru",
     "niyet_siniflandir",
     "rol_ornek_sorulari",
+    "AIAsistanKatmani",
+    "AIAsistanPaneli",
+    "AsistanYanitKarti",
 ]
 
 _KIMLIK_SEMBOLLERI = {
@@ -53,10 +56,20 @@ _KIMLIK_SEMBOLLERI = {
     "ai_rozet_metni",
 }
 
+_SOHBET_SEMBOLLERI = {
+    "AIAsistanKatmani",
+    "AIAsistanPaneli",
+    "AsistanYanitKarti",
+}
+
 
 def __getattr__(ad: str):
     if ad in _KIMLIK_SEMBOLLERI:
         from app.ai import kimlik
 
         return getattr(kimlik, ad)
+    if ad in _SOHBET_SEMBOLLERI:
+        from app.ai import sohbet
+
+        return getattr(sohbet, ad)
     raise AttributeError(f"module 'app.ai' has no attribute {ad!r}")

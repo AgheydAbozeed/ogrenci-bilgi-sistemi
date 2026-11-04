@@ -21,6 +21,7 @@ from app.ekranlar.danisman_ekran import DanismanOnayKuyrugu, DanisanPaneli
 from app.ekranlar.hoca_ve_yonetim import (
     OgretimUyesiPaneli, SekreterPaneli, YoneticiPaneli, YoneticiKayitEklemePaneli
 )
+from app.ai.sohbet import AIAsistanKatmani
 
 ROL_ADLARI = {
     "rol_ogrenci": "Öğrenci",
@@ -462,6 +463,11 @@ class AnaPencere(QMainWindow):
         btn_sql.clicked.connect(lambda: SqlRontgenDialog(self.db, self).exec())
         u_lay.addWidget(btn_sql)
 
+        self.btn_ust_ai = QPushButton("✦  AI Asistan")
+        self.btn_ust_ai.setObjectName("AIDugme")
+        self.btn_ust_ai.clicked.connect(lambda: self.ai_katmani.ac_kapat())
+        u_lay.addWidget(self.btn_ust_ai)
+
         btn_cikis = QPushButton("⇥  Kullanıcı Değiştir")
         btn_cikis.setObjectName("IkincilBtn")
         btn_cikis.clicked.connect(self.kullanici_degistir)
@@ -477,6 +483,7 @@ class AnaPencere(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.demo_dock)
 
         self.menu_butonlari: list[QPushButton] = []
+        self.ai_katmani = AIAsistanKatmani(self.icerik, self.db)
         self._kisayollari_kur()
         self.ekranlari_kur()
 
@@ -515,6 +522,9 @@ class AnaPencere(QMainWindow):
         if isinstance(aktif_modal, QDialog):
             aktif_modal.reject()
             return
+        if hasattr(self, "ai_katmani") and self.ai_katmani.acik_mi():
+            self.ai_katmani.ac_kapat()
+            return
         w = self.icerik.currentWidget()
         if w and hasattr(w, "txt_ara"):
             w.txt_ara.clear()
@@ -530,6 +540,8 @@ class AnaPencere(QMainWindow):
         tema_kaydet(yeni_tema)
         QApplication.instance().setStyleSheet(stil_uret(yeni_tema))
         self._tema_buton_metni_guncelle()
+        if hasattr(self, "ai_katmani"):
+            self.ai_katmani.tema_yenile()
         self.aktif_ekrani_yenile()
 
     def demo_rehberi_ac_kapat(self):
@@ -626,6 +638,8 @@ class AnaPencere(QMainWindow):
         self.menu_lay.addStretch()
         if self.menu_butonlari:
             self.sekme_sec(0)
+        if hasattr(self, "ai_katmani"):
+            self.ai_katmani.rol_degisti()
 
     def sekme_sec(self, idx: int):
         if idx < 0 or idx >= len(self.menu_butonlari):
@@ -643,6 +657,12 @@ class AnaPencere(QMainWindow):
         elif hasattr(w, "yenile"):
             w.yenile()
         self.icerik.setCurrentIndex(idx)
+        if hasattr(self, "ai_katmani"):
+            self.ai_katmani.konumla()
+            self.ai_katmani.balon.raise_()
+            if self.ai_katmani.acik_mi():
+                self.ai_katmani.panel.raise_()
+                self.ai_katmani.balon.raise_()
 
     def rol_degistir(self):
         yeni_rol = self.cmb_rol_degis.currentData()
