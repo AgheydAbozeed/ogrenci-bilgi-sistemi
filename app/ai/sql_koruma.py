@@ -27,6 +27,7 @@ ROL_IZINLI_GORUNUMLER: dict[str, dict[str, str]] = {
     },
     "rol_danisman": {
         "v_danisanlarim": "Danışmanın aktif danışan öğrencileri (ogrenci_id, ogrenci_no, ad_soyad, gno, gecilen_akts)",
+        "v_danisan_risk_ozellik": "Danışanların GNO, başarısız ders, katılım %, ödev ortalaması ve AI risk tahmin skoru",
         "v_onay_kuyrugu": "Danışman onayı bekleyen ders kayıt talepleri",
         "v_kayitlarim": "Danışanların ders kayıtları",
         "v_transkript": "Danışanların transkript kayıtları",

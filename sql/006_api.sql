@@ -268,6 +268,47 @@ SELECT o.kisi_id AS ogrenci_id, o.ogrenci_no, kk.ad || ' ' || kk.soyad AS ad_soy
   JOIN danismanlik dn ON dn.ogrenci_id = o.kisi_id AND dn.gecerlilik @> current_date
   LEFT JOIN v_gno g ON g.ogrenci_id = o.kisi_id;
 
+CREATE OR REPLACE VIEW v_danisan_risk_ozellik WITH (security_invoker = true) AS
+SELECT o.kisi_id AS ogrenci_id,
+       o.ogrenci_no,
+       kk.ad || ' ' || kk.soyad AS ad_soyad,
+       coalesce(g.gno, 2.50)::numeric(4,2) AS gno,
+       coalesce(g.gecilen_akts, 0)::int AS gecilen_akts,
+       coalesce((
+         SELECT count(*)::int FROM v_gecerli_sonuc gs
+          WHERE gs.ogrenci_id = o.kisi_id AND gs.durum = 'kaldi'
+       ), 0) AS basarisiz_ders_sayisi,
+       coalesce((
+         SELECT round(avg(y.katildi::int) * 100.0, 1)
+           FROM kayit ky JOIN yoklama y ON y.kayit_id = ky.kayit_id
+          WHERE ky.ogrenci_id = o.kisi_id
+       ), 85.0)::numeric(5,1) AS katilim_yuzde,
+       coalesce((
+         SELECT round(avg(nk.puan), 1)
+           FROM kayit ky JOIN not_kaydi nk ON nk.kayit_id = ky.kayit_id
+          WHERE ky.ogrenci_id = o.kisi_id AND nk.ilan_edildi
+       ), 70.0)::numeric(5,1) AS odev_ort_puan,
+       coalesce((
+         SELECT sum(d2.akts)::int
+           FROM kayit ky JOIN ders d2 ON d2.ders_id = ky.ders_id
+          WHERE ky.ogrenci_id = o.kisi_id
+            AND ky.donem_id = fn_aktif_donem_id()
+            AND ky.durum IN ('onay_bekliyor', 'onayli')
+       ), 0) AS aktif_donem_akts,
+       rt.skor AS kayitli_skor,
+       rt.ozellikler AS kayitli_ozellikler,
+       rt.hesap_zamani AS son_hesap_zamani
+  FROM ogrenci o
+  JOIN kisi kk ON kk.kisi_id = o.kisi_id
+  JOIN danismanlik dn ON dn.ogrenci_id = o.kisi_id AND dn.gecerlilik @> current_date
+  LEFT JOIN v_gno g ON g.ogrenci_id = o.kisi_id
+  LEFT JOIN LATERAL (
+    SELECT r.skor, r.ozellikler, r.hesap_zamani
+      FROM risk_tahmin r
+     WHERE r.ogrenci_id = o.kisi_id AND r.donem_id = fn_aktif_donem_id()
+     ORDER BY r.hesap_zamani DESC LIMIT 1
+  ) rt ON true;
+
 -- Ogretim uyesi gorunumleri
 CREATE OR REPLACE VIEW v_sube_listem WITH (security_invoker = true) AS
 SELECT s.sube_id, s.donem_id, d.kod AS ders_kod, d.ad AS ders_ad, s.sube_no,
@@ -661,4 +702,47 @@ BEGIN
        WHERE k.ogrenci_id = b.ogrenci_id
     ) t;
   RETURN QUERY SELECT (b.icerik_hash = v_guncel_hash), v_no, b.tur::text, b.uretim_zamani;
+END $$;
+
+CREATE OR REPLACE FUNCTION fn_ai_model_kaydet(
+  p_ad text,
+  p_metrikler jsonb,
+  p_ogrenciler int[],
+  p_skorlar numeric[],
+  p_ozellikler jsonb[]
+) RETURNS int
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_model_id int;
+  v_donem_id int := fn_aktif_donem_id();
+  v_sayac int := 0;
+  i int;
+BEGIN
+  INSERT INTO model_surum (ad, egitim_zamani, metrikler)
+  VALUES (p_ad, now(), coalesce(p_metrikler, '{}'::jsonb))
+  ON CONFLICT (ad) DO UPDATE SET
+    egitim_zamani = now(),
+    metrikler = EXCLUDED.metrikler
+  RETURNING model_id INTO v_model_id;
+
+  IF p_ogrenciler IS NOT NULL AND array_length(p_ogrenciler, 1) > 0 THEN
+    FOR i IN 1..array_length(p_ogrenciler, 1) LOOP
+      INSERT INTO risk_tahmin (ogrenci_id, donem_id, model_id, skor, ozellikler, hesap_zamani)
+      VALUES (
+        p_ogrenciler[i],
+        v_donem_id,
+        v_model_id,
+        round(least(1.0, greatest(0.0, p_skorlar[i])), 3),
+        coalesce(p_ozellikler[i], '{}'::jsonb),
+        now()
+      )
+      ON CONFLICT (ogrenci_id, donem_id, model_id) DO UPDATE SET
+        skor = EXCLUDED.skor,
+        ozellikler = EXCLUDED.ozellikler,
+        hesap_zamani = now();
+      v_sayac := v_sayac + 1;
+    END LOOP;
+  END IF;
+
+  RETURN v_sayac;
 END $$;

@@ -202,11 +202,13 @@ CREATE POLICY danismanlik_danisman ON danismanlik FOR SELECT TO rol_danisman
 DROP POLICY IF EXISTS danismanlik_yonetim ON danismanlik;
 CREATE POLICY danismanlik_yonetim ON danismanlik FOR SELECT TO rol_sekreter, rol_yonetici USING (true);
 
--- I) risk_tahmin (YALNIZ danisman kendi danisanlarini gorur; ogrenci asla goremez)
+-- I) risk_tahmin (YALNIZ danisman kendi danisanlarini gorur, yonetici model merkezi metriklerini okur; ogrenci asla goremez)
 ALTER TABLE risk_tahmin ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS risk_tahmin_danisman ON risk_tahmin;
 CREATE POLICY risk_tahmin_danisman ON risk_tahmin FOR SELECT TO rol_danisman
   USING (fn_rls_danisani_mi(ogrenci_id));
+DROP POLICY IF EXISTS risk_tahmin_yonetici ON risk_tahmin;
+CREATE POLICY risk_tahmin_yonetici ON risk_tahmin FOR SELECT TO rol_yonetici USING (true);
 
 -- J) belge
 ALTER TABLE belge ENABLE ROW LEVEL SECURITY;
@@ -250,7 +252,8 @@ TO rol_ogrenci;
 GRANT EXECUTE ON FUNCTION
   fn_danisman_karar_ben(int, text, text), fn_danisman_karar(int, int, text, text),
   fn_mezuniyet_ozet_danisan(int), fn_mezuniyet_denetim_danisan(int, int),
-  fn_mezuniyet_ozet(int), fn_mezuniyet_denetim(int, int), fn_ders_plani(int, int), fn_en_erken_mezuniyet(int, int)
+  fn_mezuniyet_ozet(int), fn_mezuniyet_denetim(int, int), fn_ders_plani(int, int), fn_en_erken_mezuniyet(int, int),
+  fn_ai_model_kaydet(text, jsonb, int[], numeric[], jsonb[])
 TO rol_danisman;
 
 GRANT EXECUTE ON FUNCTION
@@ -266,5 +269,6 @@ GRANT EXECUTE ON FUNCTION
 TO rol_sekreter, rol_yonetici;
 
 GRANT EXECUTE ON FUNCTION
-  fn_parametre_guncelle(text, text), fn_denetim_dogrula()
+  fn_parametre_guncelle(text, text), fn_denetim_dogrula(),
+  fn_ai_model_kaydet(text, jsonb, int[], numeric[], jsonb[])
 TO rol_yonetici;

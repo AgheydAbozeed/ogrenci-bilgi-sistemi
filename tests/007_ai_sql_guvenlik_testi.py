@@ -3,6 +3,7 @@ tests/007_ai_sql_guvenlik_testi.py — AI NL→SQL beyaz liste ve salt-okunur ko
 """
 import unittest
 
+from app.ai.risk_motor import lojistik_risk_hesapla, model_degerlendirme_metrikleri
 from app.ai.sablon_motor import NIYET_SABLONLARI, niyet_siniflandir
 from app.ai.sql_koruma import SemaKatalogu, SqlGuvenlikHatasi, sql_dogrula
 
@@ -59,6 +60,30 @@ class TestAiSqlGuvenlik(unittest.TestCase):
 
         s3, _ = niyet_siniflandir("Ne zaman mezun olurum?", "rol_ogrenci")
         self.assertEqual(s3.kod, "ogrenci_mezuniyet_zamani")
+
+    def test_lojistik_risk_ve_uc_neden_hesabi(self):
+        yuksek = lojistik_risk_hesapla(
+            gno=1.55,
+            katilim_yuzde=55.0,
+            odev_ort_puan=42.0,
+            basarisiz_ders_sayisi=2,
+            aktif_donem_akts=30,
+        )
+        dusuk = lojistik_risk_hesapla(
+            gno=3.45,
+            katilim_yuzde=95.0,
+            odev_ort_puan=88.0,
+            basarisiz_ders_sayisi=0,
+            aktif_donem_akts=24,
+        )
+        self.assertGreater(yuksek.skor, dusuk.skor)
+        self.assertEqual(len(yuksek.nedenler), 3)
+        self.assertTrue(yuksek.nedenler[0].risk_artirici_mi)
+        self.assertFalse(dusuk.nedenler[0].risk_artirici_mi)
+
+        metrik = model_degerlendirme_metrikleri([yuksek, dusuk])
+        self.assertEqual(metrik["tahmin_sayisi"], 2)
+        self.assertEqual(sum(metrik["histogram_sayilari"]), 2)
 
 
 if __name__ == "__main__":
