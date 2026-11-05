@@ -13,6 +13,20 @@ SET LOCAL session_replication_role = replica;
 ALTER TABLE kisi ADD COLUMN IF NOT EXISTS kullanici_no varchar(12) UNIQUE;
 ALTER TABLE kisi ADD COLUMN IF NOT EXISTS sifre text NOT NULL DEFAULT '123456';
 
+DELETE FROM parametre WHERE anahtar LIKE 'risk_%';
+
+INSERT INTO parametre (anahtar, deger, aciklama) VALUES
+  ('akts_limit_varsayilan',    '30',   'Taban donemlik AKTS ust siniri (AGNO < 2.50 veya yeni ogrenci; degistiginde tum kademeleri kaydirir)'),
+  ('akts_limit_orta',          '45',   'Orta basari (2.50 <= AGNO < 3.00) donemlik AKTS ust siniri'),
+  ('akts_limit_yuksek',        '50',   'Yuksek basari (AGNO >= 3.00) donemlik AKTS ust siniri'),
+  ('mezuniyet_min_gno',        '2.00', 'Mezuniyet ve akademik yeterlilik icin asgari AGNO (GNO) alt siniri'),
+  ('mezuniyet_toplam_akts',    '240',  'Lisans mezuniyeti icin tamamlanmasi gereken toplam AKTS kredisi'),
+  ('tekrar_ders_kurali',       'son',  'Tekrar alinan derste sayilan not: son | en_yuksek'),
+  ('devamsizlik_siniri_yuzde', '30',   'Derse devamsizlik ust siniri (%)'),
+  ('akts_kilidi',              'acik', 'DEMO: acik = ogrenci satiri kilitlenir, kapali = yazma carpikligi gorulur')
+ON CONFLICT (anahtar) DO UPDATE
+  SET aciklama = EXCLUDED.aciklama;
+
 -- 1) BOLUMLER VE PROGRAMLAR (1: Bilgisayar, 2: Yazilim, 3: Yapay Zeka)
 INSERT INTO bolum (ad) VALUES
   ('Bilgisayar Mühendisliği'),
@@ -154,7 +168,7 @@ INSERT INTO kisi_rol (kisi_id, rol)
 SELECT kisi_id, 'yonetici' FROM kisi WHERE eposta = 'yonetici@ornek.edu'
 ON CONFLICT DO NOTHING;
 
--- 4) OGRENCILER (Her yil icin 5'er ogrenci, 5 Haneli Numara: [YY][B][SS], Sifre: 123456)
+-- 4) OGRENCILER (Toplam 20 ogrenci, 5 Haneli Numara: [YY][B][SS], Sifre: 123456)
 UPDATE kisi SET ad = 'Ada',  soyad = 'Korkmaz', kullanici_no = '25204', sifre = '123456' WHERE eposta = 'ogr1@ornek.edu';
 UPDATE kisi SET ad = 'Bora', soyad = 'Aksoy',   kullanici_no = '25102', sifre = '123456' WHERE eposta = 'ogr2@ornek.edu';
 UPDATE kisi SET ad = 'Cem',  soyad = 'Güneş',   kullanici_no = '25103', sifre = '123456' WHERE eposta = 'ogr3@ornek.edu';
@@ -164,21 +178,26 @@ UPDATE ogrenci SET ogrenci_no = '25102', giris_yili = 2025 WHERE kisi_id = (SELE
 UPDATE ogrenci SET ogrenci_no = '25103', giris_yili = 2025 WHERE kisi_id = (SELECT kisi_id FROM kisi WHERE eposta = 'ogr3@ornek.edu');
 
 INSERT INTO kisi (ad, soyad, eposta, kullanici_no, sifre) VALUES
-  -- 2023 Girişliler (5 öğrenci)
+  -- 2023 Girişliler (7 öğrenci)
   ('Ali',    'Veli',    '23101@ogrenci.edu.tr', '23101', '123456'),
   ('Ayşe',   'Demir',   '23102@ogrenci.edu.tr', '23102', '123456'),
   ('Mehmet', 'Kaya',    '23103@ogrenci.edu.tr', '23103', '123456'),
   ('Zeynep', 'Şahin',   '23204@ogrenci.edu.tr', '23204', '123456'),
   ('Burak',  'Çelik',   '23305@ogrenci.edu.tr', '23305', '123456'),
-  -- 2024 Girişliler (5 öğrenci)
+  ('Kaan',   'Öztürk',  '23206@ogrenci.edu.tr', '23206', '123456'),
+  ('Sude',   'Karaca',  '23307@ogrenci.edu.tr', '23307', '123456'),
+  -- 2024 Girişliler (7 öğrenci)
   ('Elif',   'Yıldız',  '24101@ogrenci.edu.tr', '24101', '123456'),
   ('Caner',  'Aydın',   '24102@ogrenci.edu.tr', '24102', '123456'),
   ('Selin',  'Koç',     '24103@ogrenci.edu.tr', '24103', '123456'),
   ('Emre',   'Özkan',   '24204@ogrenci.edu.tr', '24204', '123456'),
   ('Derya',  'Arslan',  '24305@ogrenci.edu.tr', '24305', '123456'),
-  -- 2025 Girişliler (ek 2 öğrenci -> toplam 5 öğrenci)
+  ('Kerem',  'Aktaş',   '24206@ogrenci.edu.tr', '24206', '123456'),
+  ('Ebru',   'Yalçın',  '24307@ogrenci.edu.tr', '24307', '123456'),
+  -- 2025 Girişliler (ek 3 öğrenci + mevcut 3 -> toplam 6 öğrenci)
   ('Deniz',  'Polat',   '25101@ogrenci.edu.tr', '25101', '123456'),
-  ('Mert',   'Yavuz',   '25305@ogrenci.edu.tr', '25305', '123456')
+  ('Mert',   'Yavuz',   '25305@ogrenci.edu.tr', '25305', '123456'),
+  ('Tolga',  'Doğan',   '25206@ogrenci.edu.tr', '25206', '123456')
 ON CONFLICT (eposta) DO UPDATE
   SET ad = EXCLUDED.ad,
       soyad = EXCLUDED.soyad,
@@ -197,13 +216,18 @@ FROM (VALUES
   ('23103@ogrenci.edu.tr', '23103', 2023, 'Bilgisayar Mühendisliği (Lisans)'),
   ('23204@ogrenci.edu.tr', '23204', 2023, 'Yazılım Mühendisliği (Lisans)'),
   ('23305@ogrenci.edu.tr', '23305', 2023, 'Yapay Zeka ve Veri Mühendisliği (Lisans)'),
+  ('23206@ogrenci.edu.tr', '23206', 2023, 'Yazılım Mühendisliği (Lisans)'),
+  ('23307@ogrenci.edu.tr', '23307', 2023, 'Yapay Zeka ve Veri Mühendisliği (Lisans)'),
   ('24101@ogrenci.edu.tr', '24101', 2024, 'Bilgisayar Mühendisliği (Lisans)'),
   ('24102@ogrenci.edu.tr', '24102', 2024, 'Bilgisayar Mühendisliği (Lisans)'),
   ('24103@ogrenci.edu.tr', '24103', 2024, 'Bilgisayar Mühendisliği (Lisans)'),
   ('24204@ogrenci.edu.tr', '24204', 2024, 'Yazılım Mühendisliği (Lisans)'),
   ('24305@ogrenci.edu.tr', '24305', 2024, 'Yapay Zeka ve Veri Mühendisliği (Lisans)'),
+  ('24206@ogrenci.edu.tr', '24206', 2024, 'Yazılım Mühendisliği (Lisans)'),
+  ('24307@ogrenci.edu.tr', '24307', 2024, 'Yapay Zeka ve Veri Mühendisliği (Lisans)'),
   ('25101@ogrenci.edu.tr', '25101', 2025, 'Bilgisayar Mühendisliği (Lisans)'),
-  ('25305@ogrenci.edu.tr', '25305', 2025, 'Yapay Zeka ve Veri Mühendisliği (Lisans)')
+  ('25305@ogrenci.edu.tr', '25305', 2025, 'Yapay Zeka ve Veri Mühendisliği (Lisans)'),
+  ('25206@ogrenci.edu.tr', '25206', 2025, 'Yazılım Mühendisliği (Lisans)')
 ) v(eposta, ogr_no, yil, prog_ad)
 JOIN kisi k ON k.eposta = v.eposta
 JOIN program p ON p.ad = v.prog_ad
@@ -218,21 +242,28 @@ INSERT INTO kisi_rol (kisi_id, rol)
 SELECT kisi_id, 'ogrenci' FROM ogrenci
 ON CONFLICT DO NOTHING;
 
--- Danismanlik baslangic tarihlerini yalnizca tek kaydi olanlar icin 2023-09-01 yap
-UPDATE danismanlik d1
-   SET gecerlilik = daterange('2023-09-01', NULL, '[)')
- WHERE upper_inf(d1.gecerlilik)
-   AND NOT EXISTS (
-     SELECT 1 FROM danismanlik d2
-      WHERE d2.ogrenci_id = d1.ogrenci_id
-        AND d2.danismanlik_id <> d1.danismanlik_id
-   );
+-- Danismanliklari 4 akademisyene (10101, 10102, 10103, 10201) esit olarak (her birine 5 ogrenci) dagit
+DELETE FROM danismanlik
+ WHERE ogrenci_id IN (
+   SELECT kisi_id FROM ogrenci
+    WHERE ogrenci_no IN (
+      '23101','23102','23103','23204','23305','23206','23307',
+      '24101','24102','24103','24204','24305','24206','24307',
+      '25101','25102','25103','25204','25305','25206'
+    )
+ );
 
 INSERT INTO danismanlik (ogrenci_id, danisman_id, gecerlilik)
 SELECT o.kisi_id,
-       CASE WHEN (o.kisi_id % 2) = 0
-            THEN (SELECT kisi_id FROM kisi WHERE kullanici_no = '10102')
-            ELSE (SELECT kisi_id FROM kisi WHERE kullanici_no = '10101')
+       CASE
+         WHEN o.ogrenci_no IN ('23101', '24101', '25101', '25102', '25103')
+           THEN (SELECT kisi_id FROM kisi WHERE kullanici_no = '10101')
+         WHEN o.ogrenci_no IN ('23102', '23103', '24102', '24103', '25204')
+           THEN (SELECT kisi_id FROM kisi WHERE kullanici_no = '10102')
+         WHEN o.ogrenci_no IN ('23305', '23307', '24305', '24307', '25305')
+           THEN (SELECT kisi_id FROM kisi WHERE kullanici_no = '10103')
+         ELSE
+           (SELECT kisi_id FROM kisi WHERE kullanici_no = '10201')
        END,
        daterange('2023-09-01', NULL, '[)')
 FROM ogrenci o
@@ -250,19 +281,21 @@ INSERT INTO donem (yil, tur, kayit_baslangic, kayit_bitis, ekle_birak_bitis, don
   (2025, 'bahar', '2026-02-09', '2026-02-13', '2026-02-27', '2026-06-12')
 ON CONFLICT (yil, tur) DO NOTHING;
 
--- Her gecmis ve aktif donemde tum dersler icin 1. subeyi ac (boylece her donem ders kaydi yapilabilir)
+-- Her gecmis ve aktif donemde tum dersler icin 1. subeyi ac ve 4 akademisyene (10101, 10102, 10103, 10201) dengeli dagit
 INSERT INTO sube (ders_id, donem_id, sube_no, ogretim_uyesi_id)
 SELECT d.ders_id,
        dn.donem_id,
        1,
-       CASE (d.ders_id % 3)
+       CASE (d.ders_id % 4)
          WHEN 0 THEN (SELECT kisi_id FROM kisi WHERE kullanici_no = '10101')
          WHEN 1 THEN (SELECT kisi_id FROM kisi WHERE kullanici_no = '10102')
-         ELSE        (SELECT kisi_id FROM kisi WHERE kullanici_no = '10103')
+         WHEN 2 THEN (SELECT kisi_id FROM kisi WHERE kullanici_no = '10103')
+         ELSE        (SELECT kisi_id FROM kisi WHERE kullanici_no = '10201')
        END
 FROM ders d
 CROSS JOIN donem dn
-ON CONFLICT (ders_id, donem_id, sube_no) DO NOTHING;
+ON CONFLICT (ders_id, donem_id, sube_no) DO UPDATE
+  SET ogretim_uyesi_id = EXCLUDED.ogretim_uyesi_id;
 
 -- Aktif donem (2026 Guz) ders saatleri
 INSERT INTO sube_saat (sube_id, gun, ders_saati)
@@ -270,6 +303,7 @@ SELECT s.sube_id, v.gun, v.saat
 FROM (VALUES
   ('FIZ101', 1, 3, 5), ('FIZ101', 1, 3, 6),
   ('BIL103', 1, 4, 5), ('BIL103', 1, 4, 6),
+  ('MAT104', 1, 5, 3), ('MAT104', 1, 5, 4),
   ('BIL203', 1, 2, 7), ('BIL203', 1, 2, 8),
   ('MAT201', 1, 4, 7), ('MAT201', 1, 4, 8),
   ('BIL204', 1, 5, 7), ('BIL204', 1, 5, 8),
@@ -314,8 +348,8 @@ WHERE o.ogrenci_no NOT IN ('25102', '25103', '25204')
   );
 
 -- Gecmis donem sonuclarini ogrenci profiline gore uret
--- Dusuk notlu profiller: 23103 (Mehmet Kaya) ve 24103 (Selin Koc) -> dusuk notlar (DD, DC, FD, FF)
--- Basarili profiller: 23101 (Ali Veli), 24101 (Elif Yildiz), 24305 (Derya Arslan) -> yuksek notlar (AA, BA, BB)
+-- Dusuk notlu profiller: 23103 (Mehmet Kaya), 24103 (Selin Koc), 24206 (Kerem Aktas), 25206 (Tolga Dogan) -> dusuk notlar (DD, DC, FD, FF)
+-- Basarili profiller: 23101 (Ali Veli), 23307 (Sude Karaca), 24101 (Elif Yildiz), 24305 (Derya Arslan) -> yuksek notlar (AA, BA, BB)
 -- Diger ogrenciler -> dengeli notlar (BB, CB, CC, BA)
 INSERT INTO kayit_sonuc (kayit_id, ortalama_puan, harf, durum)
 SELECT k.kayit_id,
@@ -329,7 +363,7 @@ JOIN ders d    ON d.ders_id = k.ders_id
 CROSS JOIN LATERAL (
   SELECT
     CASE
-      WHEN o.ogrenci_no IN ('23103', '24103') THEN
+      WHEN o.ogrenci_no IN ('23103', '24103', '24206', '25206') THEN
         CASE ((k.kayit_id + d.ders_id) % 5)
           WHEN 0 THEN 35.0
           WHEN 1 THEN 54.0
@@ -337,7 +371,7 @@ CROSS JOIN LATERAL (
           WHEN 3 THEN 42.0
           ELSE        71.0
         END
-      WHEN o.ogrenci_no IN ('23101', '24101', '24305') THEN
+      WHEN o.ogrenci_no IN ('23101', '23307', '24101', '24305') THEN
         CASE ((k.kayit_id + d.ders_id) % 4)
           WHEN 0 THEN 93.0
           WHEN 1 THEN 87.0
@@ -354,7 +388,7 @@ CROSS JOIN LATERAL (
         END
     END AS puan,
     CASE
-      WHEN o.ogrenci_no IN ('23103', '24103') THEN
+      WHEN o.ogrenci_no IN ('23103', '24103', '24206', '25206') THEN
         CASE ((k.kayit_id + d.ders_id) % 5)
           WHEN 0 THEN 'FF'
           WHEN 1 THEN 'DD'
@@ -362,7 +396,7 @@ CROSS JOIN LATERAL (
           WHEN 3 THEN 'FD'
           ELSE        'CC'
         END
-      WHEN o.ogrenci_no IN ('23101', '24101', '24305') THEN
+      WHEN o.ogrenci_no IN ('23101', '23307', '24101', '24305') THEN
         CASE ((k.kayit_id + d.ders_id) % 4)
           WHEN 0 THEN 'AA'
           WHEN 1 THEN 'BA'
@@ -397,21 +431,49 @@ JOIN kayit_sonuc ks ON ks.kayit_id = k.kayit_id
 JOIN degerlendirme_bileseni db ON db.sube_id = k.sube_id
 ON CONFLICT (kayit_id, bilesen_id) DO NOTHING;
 
--- 7) AKTIF DONEM (2026 GUZ) KAYITLARI (Danisman Onay Kuyrugu ve Ogretim Uyesi Not Girisi Icin)
--- Ogrencilere 2026 Guz doneminde 1 onayli ders ve 1 onay_bekliyor ders ekle (test etmesi kolay olsun)
+-- 7) AKTIF DONEM (2026 GUZ) KAYITLARI (4 Akademisyenin Tum Subeleri ve Danisman Onay Kuyrugu Icin)
 INSERT INTO kayit (ogrenci_id, sube_id, ders_id, donem_id, durum)
 SELECT o.kisi_id, s.sube_id, d.ders_id, dn.donem_id, v.durum
 FROM (VALUES
+  -- 10101 Danisanlari
   ('23101', 'SEC104', 'onayli'),
   ('23101', 'SEC105', 'onay_bekliyor'),
+  ('24101', 'BIL301', 'onayli'),
+  ('24101', 'BIL302', 'onay_bekliyor'),
+  ('25101', 'BIL201', 'onayli'),
+  ('25101', 'BIL203', 'onay_bekliyor'),
+  ('25102', 'FIZ101', 'onayli'),
+  ('25103', 'BIL201', 'onayli'),
+  -- 10102 Danisanlari
   ('23102', 'SEC104', 'onayli'),
   ('23102', 'SEC105', 'onay_bekliyor'),
   ('23103', 'MAT101', 'onay_bekliyor'),
-  ('24101', 'BIL301', 'onayli'),
-  ('24101', 'BIL302', 'onay_bekliyor'),
   ('24102', 'BIL301', 'onayli'),
-  ('25101', 'BIL201', 'onayli'),
-  ('25101', 'BIL203', 'onay_bekliyor')
+  ('24102', 'SEC101', 'onay_bekliyor'),
+  ('24103', 'FIZ101', 'onayli'),
+  ('24103', 'BIL103', 'onay_bekliyor'),
+  ('25204', 'BIL103', 'onayli'),
+  -- 10103 Danisanlari
+  ('23305', 'SEC104', 'onayli'),
+  ('23305', 'SEC106', 'onay_bekliyor'),
+  ('23307', 'SEC105', 'onayli'),
+  ('23307', 'SEC106', 'onay_bekliyor'),
+  ('24305', 'BIL301', 'onayli'),
+  ('24305', 'BIL302', 'onay_bekliyor'),
+  ('24307', 'BIL301', 'onayli'),
+  ('25305', 'BIL201', 'onayli'),
+  ('25305', 'MAT201', 'onay_bekliyor'),
+  -- 10201 Danisanlari
+  ('23204', 'SEC104', 'onayli'),
+  ('23204', 'SEC105', 'onay_bekliyor'),
+  ('23206', 'SEC104', 'onayli'),
+  ('23206', 'SEC106', 'onay_bekliyor'),
+  ('24204', 'BIL301', 'onayli'),
+  ('24204', 'SEC102', 'onay_bekliyor'),
+  ('24206', 'FIZ101', 'onayli'),
+  ('24206', 'BIL103', 'onay_bekliyor'),
+  ('25206', 'FIZ101', 'onayli'),
+  ('25206', 'MAT201', 'onay_bekliyor')
 ) v(ogr_no, kod, durum)
 JOIN ogrenci o ON o.ogrenci_no = v.ogr_no
 JOIN ders d    ON d.kod = v.kod
@@ -420,6 +482,21 @@ JOIN sube s    ON s.ders_id = d.ders_id AND s.donem_id = dn.donem_id AND s.sube_
 WHERE NOT EXISTS (
   SELECT 1 FROM kayit k WHERE k.ogrenci_id = o.kisi_id AND k.donem_id = dn.donem_id AND k.ders_id = d.ders_id
 );
+
+-- Yoklama kayitlari (Katilim % ozelliginin her ogrenci icin gercekci dagilmasi icin)
+INSERT INTO yoklama (kayit_id, tarih, katildi)
+SELECT k.kayit_id,
+       (DATE '2025-10-01' + (gs.hafta * 7))::date,
+       CASE
+         WHEN o.ogrenci_no IN ('23103', '24103', '24206', '25206', '25102') THEN (gs.hafta <= 3)
+         WHEN o.ogrenci_no IN ('23101', '23307', '24101', '24305', '25103') THEN (gs.hafta <= 6)
+         ELSE (gs.hafta <= 5)
+       END
+FROM kayit k
+JOIN ogrenci o ON o.kisi_id = k.ogrenci_id
+CROSS JOIN generate_series(1, 6) AS gs(hafta)
+WHERE k.durum = 'onayli'
+ON CONFLICT (kayit_id, tarih) DO NOTHING;
 
 -- Aktif donem onayli kayitlar icin ogrenci_slot satirlarini senkronize et
 INSERT INTO ogrenci_slot (ogrenci_id, donem_id, gun, ders_saati, kayit_id)

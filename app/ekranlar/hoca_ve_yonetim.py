@@ -93,7 +93,7 @@ class OgretimUyesiPaneli(QWidget):
     def yenile(self):
         self.cmb_sube.blockSignals(True)
         self.cmb_sube.clear()
-        for s in self.db.sorgula("SELECT * FROM v_sube_listem ORDER BY donem_id DESC, ders_kod"):
+        for s in self.db.sorgula("SELECT * FROM v_sube_listem ORDER BY donem_id DESC, ogrenci_sayisi DESC, ders_kod"):
             self.cmb_sube.addItem(
                 f"{s['ders_kod']} - {s['ders_ad']} (Şube {s['sube_no']}) [{s['ogrenci_sayisi']} Öğr.]",
                 s["sube_id"]
@@ -1133,12 +1133,31 @@ class YoneticiPaneli(QWidget):
         self.kart_lay.addWidget(bilgi_karti("SHA-256 Log Zinciri", "Aktif & Korumalı ✔", "🛡️", "#15803D"))
 
     def param_degistir(self, anahtar: str, mevcut: str):
-        yeni, ok = QInputDialog.getText(self, "Parametre Güncelle", f"'{anahtar}' için yeni değer:", text=mevcut)
+        secenekler = {
+            "tekrar_ders_kurali": ["son", "en_yuksek"],
+            "akts_kilidi": ["acik", "kapali"],
+        }
+        if anahtar in secenekler:
+            liste = secenekler[anahtar]
+            idx = liste.index(mevcut) if mevcut in liste else 0
+            yeni, ok = QInputDialog.getItem(
+                self, "Parametre Güncelle", f"'{anahtar}' için yeni değer seçin:", liste, idx, False
+            )
+        else:
+            yeni, ok = QInputDialog.getText(
+                self, "Parametre Güncelle", f"'{anahtar}' için yeni değer:", text=mevcut
+            )
         if not ok:
             return
         try:
             self.db.calistir("SELECT fn_parametre_guncelle(%s, %s)", (anahtar, yeni))
             self.yenile()
+            QMessageBox.information(
+                self,
+                "Parametre Güncellendi ✔",
+                f"'{anahtar}' parametresi '{yeni}' olarak güncellendi.\n\n"
+                "İlgili AKTS limit kuralları, program mezuniyet eşikleri ve SHA-256 denetim logu otomatik olarak senkronize edildi.",
+            )
         except Exception as e:
             hata_goster(self, "Hata", e)
 

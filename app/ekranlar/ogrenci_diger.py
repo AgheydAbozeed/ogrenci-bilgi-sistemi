@@ -1034,29 +1034,42 @@ class OgrenciMezuniyetSimulasyon(QWidget):
             if it.widget():
                 it.widget().deleteLater()
 
+        ozet = self.db.tek_satir("SELECT * FROM fn_mezuniyet_ozet_ben()") or {}
         denetim = self.db.sorgula("SELECT * FROM fn_mezuniyet_denetim_ben()")
-        plan = self.db.sorgula("SELECT * FROM fn_ders_plani_ben(30)")
-        trans = self.db.sorgula("SELECT * FROM v_transkript")
+        plan = self.db.sorgula("SELECT * FROM fn_ders_plani_ben()")
+        akts_lim = int((self.db.tek_satir("SELECT fn_akts_limit(fn_oturum_kisi_id()) AS lim") or {}).get("lim") or 30)
 
-        katsayi = {"AA": 4.0, "BA": 3.5, "BB": 3.0, "CB": 2.5, "CC": 2.0, "DC": 1.5, "DD": 1.0, "FD": 0.5, "FF": 0.0}
-        tp, ta, ga = 0.0, 0, 0
-        for r in trans:
-            ak = int(r.get("akts") or 0)
-            h = r.get("harf")
-            if h in katsayi:
-                tp += ak * katsayi[h]
-                ta += ak
-            if r.get("durum") == "gecti":
-                ga += ak
-        gno = (tp / ta) if ta > 0 else 0.0
-        eksik_var = any(d.get("durum") != "tamam" for d in denetim)
+        ga = int(ozet.get("gecilen_akts") or 0)
+        hedef_akts = int(ozet.get("gereken_akts") or 240)
+        gno = float(ozet.get("gno") or 0.0)
+        min_gno = float(ozet.get("min_gno") or 2.00)
+        mezun_uygun = bool(ozet.get("mezuniyet_uygun"))
         max_donem = max([int(p.get("donem_sira") or p.get("onerilen_donem") or p.get("donem_no") or 1) for p in plan], default=0)
 
         self.kart_lay.addWidget(
-            bilgi_karti("Mezuniyet Durumu", "Eksikler Var" if eksik_var else "Mezun Olabilir ✔", "🎓", "#B91C1C" if eksik_var else "#15803D")
+            bilgi_karti(
+                "Mezuniyet Durumu",
+                "Mezun Olabilir ✔" if mezun_uygun else "Eksikler Var",
+                "🎓",
+                "#15803D" if mezun_uygun else "#B91C1C",
+            )
         )
-        self.kart_lay.addWidget(bilgi_karti("AKTS (Geçilen / Hedef)", f"{ga} / 240", "⚖️", "#2563EB"))
-        self.kart_lay.addWidget(bilgi_karti("GNO (Mevcut / Min)", f"{gno:.2f} / 2.00", "🅰️", "#15803D"))
+        self.kart_lay.addWidget(
+            bilgi_karti(
+                "AKTS (Geçilen / Hedef)",
+                f"{ga} / {hedef_akts} (Limit: {akts_lim})",
+                "⚖️",
+                "#15803D" if ga >= hedef_akts else "#2563EB",
+            )
+        )
+        self.kart_lay.addWidget(
+            bilgi_karti(
+                "AGNO (Mevcut / Min)",
+                f"{gno:.2f} / {min_gno:.2f}",
+                "🅰️",
+                "#15803D" if gno >= min_gno else "#B91C1C",
+            )
+        )
         self.kart_lay.addWidget(bilgi_karti("DAG Kritik Yol", f"{max_donem} Dönem", "🕸️", "#2563EB"))
 
         self.dag_harita.yukle()

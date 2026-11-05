@@ -229,6 +229,8 @@ class OgrenciAnaSayfa(QWidget):
 
         ozet = self.db.tek_satir("SELECT * FROM v_ana_sayfa") or {}
         mez = self.db.tek_satir("SELECT * FROM fn_mezuniyet_ozet_ben()") or {}
+        akts_lim_satir = self.db.tek_satir("SELECT fn_akts_limit(fn_oturum_kisi_id()) AS lim") or {}
+        akts_lim = int(akts_lim_satir.get("lim") or 30)
 
         profil = self.db.tek_satir(
             """SELECT o.ogrenci_no, o.giris_yili, k.ad || ' ' || k.soyad AS ad_soyad,
@@ -302,17 +304,21 @@ class OgrenciAnaSayfa(QWidget):
 
         m_grid = QGridLayout()
         m_grid.setSpacing(12)
+        gereken_akts = int(mez.get("gereken_akts") or 240)
+        min_gno = float(mez.get("min_gno") or 2.00)
+        mevcut_gno = ozet.get("gno")
+        gno_renk = "#15803D" if (mevcut_gno is not None and float(mevcut_gno) >= min_gno) else "#B91C1C"
         m_grid.addWidget(
-            bilgi_karti("Sınıf Bilgisi", f"{ozet.get('sinif', 1)}. Sınıf", "🎓", "#2563EB"), 0, 0
+            bilgi_karti("Sınıf & Dönem AKTS Limiti", f"{ozet.get('sinif', 1)}. Sınıf ({akts_lim} AKTS)", "🎓", "#2563EB"), 0, 0
         )
         m_grid.addWidget(
-            bilgi_karti("Geçilen Kredi (AKTS)", f"{ozet.get('gecilen_akts', 0)} / {mez.get('gereken_akts', 240)}", "±÷", "#15803D"), 0, 1
+            bilgi_karti("Geçilen Kredi (AKTS)", f"{ozet.get('gecilen_akts', 0)} / {gereken_akts}", "±÷", "#15803D"), 0, 1
         )
         m_grid.addWidget(
             bilgi_karti("Dönem Not Ortalaması", str(ozet.get("dno") or "-"), ort_harf_rozeti(ozet.get("dno")), "#2563EB"), 1, 0
         )
         m_grid.addWidget(
-            bilgi_karti("Genel Not Ortalaması", str(ozet.get("gno") or "-"), ort_harf_rozeti(ozet.get("gno")), "#2563EB"), 1, 1
+            bilgi_karti(f"Genel Ort. (Min {min_gno:.2f})", str(mevcut_gno or "-"), ort_harf_rozeti(mevcut_gno), gno_renk), 1, 1
         )
         r_lay.addLayout(m_grid)
 

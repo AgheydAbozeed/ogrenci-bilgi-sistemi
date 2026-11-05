@@ -272,3 +272,20 @@ GRANT EXECUTE ON FUNCTION
   fn_parametre_guncelle(text, text), fn_denetim_dogrula(),
   fn_ai_model_kaydet(text, jsonb, int[], numeric[], jsonb[])
 TO rol_yonetici;
+
+-- 009_yonetici_ekleme_ve_optimizasyon.sql yuklu ise yonetici/sekreter fonksiyon ve gorunum yetkilerini koru
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'fn_sonraki_ogrenci_no') THEN
+    EXECUTE 'GRANT EXECUTE ON FUNCTION
+      fn_sonraki_ogrenci_no(smallint, int),
+      fn_sonraki_akademisyen_no(int),
+      fn_yonetici_ogrenci_ekle(text, text, text, varchar, int, smallint, int, text),
+      fn_yonetici_ogretmen_ekle(text, text, text, varchar, int, text, text, text),
+      fn_yonetici_ders_ekle(varchar, text, smallint, smallint, smallint, smallint, varchar, int, varchar, int, smallint, smallint)
+    TO rol_yonetici, rol_sekreter';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'v_yonetici_ogrenciler') THEN
+    EXECUTE 'GRANT SELECT ON v_yonetici_ogrenciler, v_yonetici_akademisyenler, v_yonetici_dersler TO rol_yonetici, rol_sekreter';
+  END IF;
+END $$;

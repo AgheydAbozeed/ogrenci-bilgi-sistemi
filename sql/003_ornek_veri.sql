@@ -18,10 +18,17 @@ INSERT INTO akts_limit_kural (min_gno, max_gno, max_akts) VALUES
   (0.00, 2.50, 30), (2.50, 3.00, 45), (3.00, 4.01, 50);
 
 INSERT INTO parametre (anahtar, deger, aciklama) VALUES
-  ('akts_limit_varsayilan',    '30',   'GNO henuz yokken donemlik AKTS ust siniri'),
+  ('akts_limit_varsayilan',    '30',   'Taban donemlik AKTS ust siniri (AGNO < 2.50 veya yeni ogrenci; degistiginde tum kademeleri kaydirir)'),
+  ('akts_limit_orta',          '45',   'Orta basari (2.50 <= AGNO < 3.00) donemlik AKTS ust siniri'),
+  ('akts_limit_yuksek',        '50',   'Yuksek basari (AGNO >= 3.00) donemlik AKTS ust siniri'),
+  ('mezuniyet_min_gno',        '2.00', 'Mezuniyet ve akademik yeterlilik icin asgari AGNO (GNO) alt siniri'),
+  ('mezuniyet_toplam_akts',    '240',  'Lisans mezuniyeti icin tamamlanmasi gereken toplam AKTS kredisi'),
   ('tekrar_ders_kurali',       'son',  'Tekrar alinan derste sayilan not: son | en_yuksek'),
-  ('devamsizlik_siniri_yuzde', '30',   'Devamsizlik siniri (ORNEK)'),
-  ('akts_kilidi',              'acik', 'DEMO: acik = ogrenci satiri kilitlenir, kapali = yazma carpikligi gorulur');
+  ('devamsizlik_siniri_yuzde', '30',   'Derse devamsizlik ust siniri (%)'),
+  ('akts_kilidi',              'acik', 'DEMO: acik = ogrenci satiri kilitlenir, kapali = yazma carpikligi gorulur')
+ON CONFLICT (anahtar) DO UPDATE
+  SET deger = EXCLUDED.deger,
+      aciklama = EXCLUDED.aciklama;
 
 -- Akademik yapi ---------------------------------------------------------
 INSERT INTO bolum (ad) VALUES ('Yapay Zeka ve Veri Muhendisligi');

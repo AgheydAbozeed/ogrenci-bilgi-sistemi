@@ -66,6 +66,8 @@ def lojistik_risk_hesapla(
     basarisiz_ders_sayisi: int = 0,
     aktif_donem_akts: int = 24,
     ogrenci_id: int = 0,
+    min_gno: float = 2.00,
+    devamsizlik_siniri: float = 30.0,
 ) -> RiskTahminSonucu:
     """
     Öğrencinin akademik özelliklerinden açıklanabilir lojistik risk skorunu (0–1)
@@ -76,12 +78,16 @@ def lojistik_risk_hesapla(
     odev_v = max(0.0, min(100.0, float(odev_ort_puan if odev_ort_puan is not None else 70.0)))
     ff_v = max(0, int(basarisiz_ders_sayisi or 0))
     akts_v = max(0, int(aktif_donem_akts or 0))
+    min_gno_v = max(0.0, min(4.0, float(min_gno if min_gno is not None else 2.00)))
+    devam_sinir_v = max(5.0, min(100.0, float(devamsizlik_siniri if devamsizlik_siniri is not None else 30.0)))
 
-    # Referans noktalarına göre doğrusal lojit katkıları:
+    # Referans noktalarına göre doğrusal lojit katkıları (yönetici parametrelerine duyarlı):
     #   + değer -> riski artırır (kırmızı çubuk)
     #   - değer -> riski azaltır (yeşil çubuk)
-    katki_gno = 1.45 * (2.25 - gno_v)
-    katki_katilim = 2.60 * ((82.0 - katilim_v) / 100.0)
+    gno_referans = min_gno_v + 0.25
+    katilim_referans = max(50.0, min(95.0, (100.0 - devam_sinir_v) + 12.0))
+    katki_gno = 1.45 * (gno_referans - gno_v)
+    katki_katilim = 2.60 * ((katilim_referans - katilim_v) / 100.0)
     katki_odev = 2.10 * ((68.0 - odev_v) / 100.0)
     katki_ff = 0.52 * (ff_v - 0.6)
     katki_akts = 0.04 * (akts_v - 24.0)
@@ -226,6 +232,8 @@ def danisan_risklerini_yenile(db) -> dict:
             basarisiz_ders_sayisi=int(s.get("basarisiz_ders_sayisi") or 0),
             aktif_donem_akts=int(s.get("aktif_donem_akts") or 24),
             ogrenci_id=int(s["ogrenci_id"]),
+            min_gno=float(s.get("min_gno") or 2.00),
+            devamsizlik_siniri=float(s.get("devamsizlik_siniri") or 30.0),
         )
         tahminler.append(sonuc)
         ogrenciler.append(sonuc.ogrenci_id)

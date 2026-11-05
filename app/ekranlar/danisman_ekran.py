@@ -4,9 +4,12 @@ from PySide6.QtWidgets import (
     QInputDialog, QSplitter
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor
 from app.db import Veritabani, hata_goster
 from app.stil import OLCULER
 from app.ekranlar.ogrenci_ana import bilgi_karti
+from app.ai.risk_motor import RiskTahminSonucu, lojistik_risk_hesapla
+from app.ai.risk_radar import RiskRadariKarti
 
 
 class DanismanOnayKuyrugu(QWidget):
@@ -106,7 +109,7 @@ class DanismanOnayKuyrugu(QWidget):
 
 
 class DanisanPaneli(QWidget):
-    """Danışmanın aktif danışanları ve seçili öğrencinin mezuniyet grup denetimi."""
+    """Danışmanın aktif danışanları, AI dairesel risk radarı ve mezuniyet grup denetimi."""
 
     GNO_ESIK = 2.0
 
@@ -114,12 +117,13 @@ class DanisanPaneli(QWidget):
         super().__init__()
         self.db = db
         self.danisanlar: list[dict] = []
+        self._risk_sonuclari: dict[int, RiskTahminSonucu] = {}
         self.lay = QVBoxLayout(self)
         self.lay.setContentsMargins(18, 16, 18, 16)
         self.lay.setSpacing(10)
 
         ust = QHBoxLayout()
-        baslik = QLabel("Danışanlarım")
+        baslik = QLabel("Danışanlarım ve ✦ AI Akademik Risk Radarı")
         baslik.setObjectName("SayfaBaslik")
         ust.addWidget(baslik)
         ust.addStretch()
@@ -139,9 +143,11 @@ class DanisanPaneli(QWidget):
         w_ust.setObjectName("PortalKart")
         l_ust = QVBoxLayout(w_ust)
         l_ust.setContentsMargins(14, 10, 14, 10)
-        l_ust.addWidget(QLabel("<b>👥  Aktif Danışan Listesi (Detay görmek için satıra tıklayın)</b>"))
-        self.tbl_danisan = QTableWidget(0, 4)
-        self.tbl_danisan.setHorizontalHeaderLabels(["Öğrenci No", "Ad Soyad", "GNO", "Geçilen AKTS"])
+        l_ust.addWidget(QLabel("<b>👥  Aktif Danışan Listesi (Risk radarı ve denetim için satıra tıklayın)</b>"))
+        self.tbl_danisan = QTableWidget(0, 6)
+        self.tbl_danisan.setHorizontalHeaderLabels(
+            ["Öğrenci No", "Ad Soyad", "GNO", "Geçilen AKTS", "Katılım %", "✦ AI Risk Tahmini"]
+        )
         self.tbl_danisan.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tbl_danisan.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_danisan.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -149,6 +155,14 @@ class DanisanPaneli(QWidget):
         self.tbl_danisan.itemSelectionChanged.connect(self.ogrenci_secildi)
         l_ust.addWidget(self.tbl_danisan)
         splitter.addWidget(w_ust)
+
+        w_alt = QWidget()
+        l_alt = QHBoxLayout(w_alt)
+        l_alt.setContentsMargins(0, 0, 0, 0)
+        l_alt.setSpacing(12)
+
+        self.radar_karti = RiskRadariKarti(w_alt)
+        l_alt.addWidget(self.radar_karti, 1)
 
         k_mez = QFrame()
         k_mez.setObjectName("PortalKart")
@@ -162,10 +176,17 @@ class DanisanPaneli(QWidget):
         self.tbl_mez.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_mez.setEditTriggers(QTableWidget.NoEditTriggers)
         v_mez.addWidget(self.tbl_mez)
-        splitter.addWidget(k_mez)
+        l_alt.addWidget(k_mez, 1)
 
+        splitter.addWidget(w_alt)
         self.lay.addWidget(splitter, 1)
         self.yenile()
+
+    def _danisan_verisi_yukle(self) -> list[dict]:
+        try:
+            return self.db.sorgula("SELECT * FROM v_danisan_risk_ozellik ORDER BY ogrenci_no")
+        except Exception:
+            return self.db.sorgula("SELECT * FROM v_danisanlarim ORDER BY ogrenci_no")
 
     def yenile(self):
         while self.kart_lay.count():
@@ -173,23 +194,56 @@ class DanisanPaneli(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-        self.danisanlar = self.db.sorgula("SELECT * FROM v_danisanlarim ORDER BY ogrenci_no")
+        self.danisanlar = self._danisan_verisi_yukle()
+        self._risk_sonuclari.clear()
+        min_gno_esik = 2.00
+        for d in self.danisanlar:
+            oid = int(d["ogrenci_id"])
+            min_gno_esik = float(d.get("min_gno") or 2.00)
+            self._risk_sonuclari[oid] = lojistik_risk_hesapla(
+                gno=float(d.get("gno") or 2.50),
+                katilim_yuzde=float(d.get("katilim_yuzde") or 85.0),
+                odev_ort_puan=float(d.get("odev_ort_puan") or 70.0),
+                basarisiz_ders_sayisi=int(d.get("basarisiz_ders_sayisi") or 0),
+                aktif_donem_akts=int(d.get("aktif_donem_akts") or 24),
+                ogrenci_id=oid,
+                min_gno=min_gno_esik,
+                devamsizlik_siniri=float(d.get("devamsizlik_siniri") or 30.0),
+            )
+
         gnolar = [float(d["gno"]) for d in self.danisanlar if d.get("gno") is not None]
-        esik_alti = sum(1 for g in gnolar if g < self.GNO_ESIK)
+        yuksek_risk = sum(1 for r in self._risk_sonuclari.values() if r.skor >= 0.65)
         ortalama = f"{sum(gnolar) / len(gnolar):.2f}" if gnolar else "-"
 
         self.kart_lay.addWidget(bilgi_karti("Toplam Danışan", f"{len(self.danisanlar)} Öğrenci", "👥", "#2563EB"))
-        self.kart_lay.addWidget(bilgi_karti(f"GNO < {self.GNO_ESIK:.2f}", f"{esik_alti} Öğrenci", "⚠️", "#B91C1C"))
-        self.kart_lay.addWidget(bilgi_karti("Ortalama GNO", ortalama, "±÷", "#15803D"))
+        self.kart_lay.addWidget(bilgi_karti("✦ Yüksek Riskli", f"{yuksek_risk} Öğrenci", "⚠️", "#B91C1C"))
+        self.kart_lay.addWidget(bilgi_karti(f"Ort. GNO (Min {min_gno_esik:.2f})", ortalama, "±÷", "#15803D"))
 
         self.tbl_danisan.setRowCount(0)
         for d in self.danisanlar:
             r = self.tbl_danisan.rowCount()
             self.tbl_danisan.insertRow(r)
+            oid = int(d["ogrenci_id"])
+            sonuc = self._risk_sonuclari[oid]
+
             self.tbl_danisan.setItem(r, 0, QTableWidgetItem(str(d["ogrenci_no"])))
             self.tbl_danisan.setItem(r, 1, QTableWidgetItem(str(d["ad_soyad"])))
             self.tbl_danisan.setItem(r, 2, QTableWidgetItem(str(d.get("gno") or "-")))
             self.tbl_danisan.setItem(r, 3, QTableWidgetItem(str(d["gecilen_akts"])))
+            katilim_str = f"%{float(d.get('katilim_yuzde') or 85.0):.0f}"
+            self.tbl_danisan.setItem(r, 4, QTableWidgetItem(katilim_str))
+
+            risk_item = QTableWidgetItem(f"✦ %{sonuc.yuzde} ({sonuc.seviye})")
+            if sonuc.skor >= 0.65:
+                risk_item.setBackground(QBrush(QColor("#FEE2E2")))
+                risk_item.setForeground(QBrush(QColor("#B91C1C")))
+            elif sonuc.skor >= 0.35:
+                risk_item.setBackground(QBrush(QColor("#FEF3C7")))
+                risk_item.setForeground(QBrush(QColor("#92400E")))
+            else:
+                risk_item.setBackground(QBrush(QColor("#DCFCE7")))
+                risk_item.setForeground(QBrush(QColor("#15803D")))
+            self.tbl_danisan.setItem(r, 5, risk_item)
 
         if self.danisanlar:
             self.tbl_danisan.selectRow(0)
@@ -199,9 +253,13 @@ class DanisanPaneli(QWidget):
         if secili < 0 or secili >= len(self.danisanlar):
             return
         ogrenci = self.danisanlar[secili]
-        self.lbl_mez.setText(f"<b>🎓  {ogrenci['ad_soyad']} — Mezuniyet Grup Denetimi</b>")
+        oid = int(ogrenci["ogrenci_id"])
+        sonuc = self._risk_sonuclari.get(oid)
+        if sonuc:
+            self.radar_karti.sonuc_goster(ogrenci["ad_soyad"], sonuc)
 
-        denetim = self.db.sorgula("SELECT * FROM fn_mezuniyet_denetim_danisan(%s)", (ogrenci["ogrenci_id"],))
+        self.lbl_mez.setText(f"<b>🎓  {ogrenci['ad_soyad']} — Mezuniyet Grup Denetimi</b>")
+        denetim = self.db.sorgula("SELECT * FROM fn_mezuniyet_denetim_danisan(%s)", (oid,))
         self.tbl_mez.setRowCount(0)
         for m in denetim:
             r = self.tbl_mez.rowCount()

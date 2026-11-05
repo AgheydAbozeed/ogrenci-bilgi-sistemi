@@ -42,14 +42,36 @@ $$;
 
 CREATE OR REPLACE FUNCTION fn_akts_limit(p_ogrenci int) RETURNS int
 LANGUAGE plpgsql STABLE AS $$
-DECLARE v_gno numeric; v_limit int;
+DECLARE
+  v_gno numeric;
+  v_limit int;
+  v_varsayilan int;
 BEGIN
+  SELECT deger::int INTO v_varsayilan FROM parametre WHERE anahtar = 'akts_limit_varsayilan';
   v_gno := fn_gno(p_ogrenci);
   IF v_gno IS NOT NULL THEN
-    SELECT max_akts INTO v_limit FROM akts_limit_kural WHERE v_gno >= min_gno AND v_gno < max_gno;
+    IF v_gno < 2.50 THEN
+      v_limit := coalesce(
+        v_varsayilan,
+        (SELECT max_akts FROM akts_limit_kural WHERE v_gno >= min_gno AND v_gno < max_gno LIMIT 1),
+        30
+      );
+    ELSIF v_gno < 3.00 THEN
+      v_limit := coalesce(
+        (SELECT deger::int FROM parametre WHERE anahtar = 'akts_limit_orta'),
+        (SELECT max_akts FROM akts_limit_kural WHERE v_gno >= min_gno AND v_gno < max_gno LIMIT 1),
+        45
+      );
+    ELSE
+      v_limit := coalesce(
+        (SELECT deger::int FROM parametre WHERE anahtar = 'akts_limit_yuksek'),
+        (SELECT max_akts FROM akts_limit_kural WHERE v_gno >= min_gno AND v_gno < max_gno LIMIT 1),
+        50
+      );
+    END IF;
   END IF;
   IF v_limit IS NULL THEN
-    SELECT deger::int INTO v_limit FROM parametre WHERE anahtar = 'akts_limit_varsayilan';
+    v_limit := coalesce(v_varsayilan, 30);
   END IF;
   RETURN v_limit;
 END $$;

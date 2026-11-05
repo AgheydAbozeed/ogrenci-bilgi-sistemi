@@ -118,22 +118,108 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------
+-- 2.1) PARAMETRE SENKRONIZASYONU VE AKTS LIMITI GUNCELLEMESI
+-- ---------------------------------------------------------------------
+DELETE FROM parametre WHERE anahtar LIKE 'risk_%';
+
+INSERT INTO parametre (anahtar, deger, aciklama) VALUES
+  ('akts_limit_varsayilan',    '30',   'Taban donemlik AKTS ust siniri (AGNO < 2.50 veya yeni ogrenci; degistiginde tum kademeleri kaydirir)'),
+  ('akts_limit_orta',          '45',   'Orta basari (2.50 <= AGNO < 3.00) donemlik AKTS ust siniri'),
+  ('akts_limit_yuksek',        '50',   'Yuksek basari (AGNO >= 3.00) donemlik AKTS ust siniri'),
+  ('mezuniyet_min_gno',        '2.00', 'Mezuniyet ve akademik yeterlilik icin asgari AGNO (GNO) alt siniri'),
+  ('mezuniyet_toplam_akts',    '240',  'Lisans mezuniyeti icin tamamlanmasi gereken toplam AKTS kredisi'),
+  ('tekrar_ders_kurali',       'son',  'Tekrar alinan derste sayilan not: son | en_yuksek'),
+  ('devamsizlik_siniri_yuzde', '30',   'Derse devamsizlik ust siniri (%)'),
+  ('akts_kilidi',              'acik', 'DEMO: acik = ogrenci satiri kilitlenir, kapali = yazma carpikligi gorulur')
+ON CONFLICT (anahtar) DO UPDATE
+  SET aciklama = EXCLUDED.aciklama;
+
+CREATE OR REPLACE FUNCTION fn_akts_limit(p_ogrenci int) RETURNS int
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  v_gno numeric;
+  v_limit int;
+  v_varsayilan int;
+BEGIN
+  SELECT deger::int INTO v_varsayilan FROM parametre WHERE anahtar = 'akts_limit_varsayilan';
+  v_gno := fn_gno(p_ogrenci);
+  IF v_gno IS NOT NULL THEN
+    IF v_gno < 2.50 THEN
+      v_limit := coalesce(
+        v_varsayilan,
+        (SELECT max_akts FROM akts_limit_kural WHERE v_gno >= min_gno AND v_gno < max_gno LIMIT 1),
+        30
+      );
+    ELSIF v_gno < 3.00 THEN
+      v_limit := coalesce(
+        (SELECT deger::int FROM parametre WHERE anahtar = 'akts_limit_orta'),
+        (SELECT max_akts FROM akts_limit_kural WHERE v_gno >= min_gno AND v_gno < max_gno LIMIT 1),
+        45
+      );
+    ELSE
+      v_limit := coalesce(
+        (SELECT deger::int FROM parametre WHERE anahtar = 'akts_limit_yuksek'),
+        (SELECT max_akts FROM akts_limit_kural WHERE v_gno >= min_gno AND v_gno < max_gno LIMIT 1),
+        50
+      );
+    END IF;
+  END IF;
+  IF v_limit IS NULL THEN
+    v_limit := coalesce(v_varsayilan, 30);
+  END IF;
+  RETURN v_limit;
+END $$;
+
+-- ---------------------------------------------------------------------
 -- 3) OKUMA GORUNUMLERI (§1.2)
 -- ---------------------------------------------------------------------
--- Giris ekrani icin (sahip yetkisiyle calisir, obs_login rolu okur)
-CREATE OR REPLACE VIEW v_demo_kullanicilar AS
-SELECT k.kisi_id,
-       k.ad || ' ' || k.soyad AS ad_soyad,
-       array_remove(array_agg(DISTINCT r.rol ORDER BY r.rol), NULL) AS roller
-  FROM kisi k
-  LEFT JOIN (
-    SELECT kisi_id, 'rol_' || rol AS rol FROM kisi_rol
-    UNION
-    SELECT danisman_id AS kisi_id, 'rol_danisman' AS rol
-      FROM danismanlik WHERE gecerlilik @> current_date
-  ) r ON r.kisi_id = k.kisi_id
- GROUP BY k.kisi_id, k.ad, k.soyad
- ORDER BY k.kisi_id;
+-- Giris ekrani icin (kisi.kullanici_no sutunu varsa 8 sutunlu kurumsal gorunum, yoksa 3 sutunlu temel gorunum)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'kisi' AND column_name = 'kullanici_no'
+  ) THEN
+    EXECUTE $v$
+      CREATE OR REPLACE VIEW v_demo_kullanicilar AS
+      SELECT k.kisi_id,
+             k.ad || ' ' || k.soyad AS ad_soyad,
+             array_remove(array_agg(DISTINCT r.rol ORDER BY r.rol), NULL) AS roller,
+             COALESCE(o.ogrenci_no, k.kullanici_no) AS kullanici_no,
+             k.sifre,
+             CASE WHEN o.kisi_id IS NOT NULL THEN 'ogrenci' ELSE 'akademisyen' END AS giris_turu,
+             p.ad AS program_ad,
+             o.giris_yili
+        FROM kisi k
+        LEFT JOIN ogrenci o ON o.kisi_id = k.kisi_id
+        LEFT JOIN program p ON p.program_id = o.program_id
+        LEFT JOIN (
+          SELECT kisi_id, 'rol_' || rol AS rol FROM kisi_rol
+          UNION
+          SELECT danisman_id AS kisi_id, 'rol_danisman' AS rol
+            FROM danismanlik WHERE gecerlilik @> current_date
+        ) r ON r.kisi_id = k.kisi_id
+       GROUP BY k.kisi_id, k.ad, k.soyad, o.ogrenci_no, k.kullanici_no, k.sifre, o.kisi_id, p.ad, o.giris_yili
+       ORDER BY giris_turu DESC, COALESCE(o.ogrenci_no, k.kullanici_no)
+    $v$;
+  ELSE
+    EXECUTE $v$
+      CREATE OR REPLACE VIEW v_demo_kullanicilar AS
+      SELECT k.kisi_id,
+             k.ad || ' ' || k.soyad AS ad_soyad,
+             array_remove(array_agg(DISTINCT r.rol ORDER BY r.rol), NULL) AS roller
+        FROM kisi k
+        LEFT JOIN (
+          SELECT kisi_id, 'rol_' || rol AS rol FROM kisi_rol
+          UNION
+          SELECT danisman_id AS kisi_id, 'rol_danisman' AS rol
+            FROM danismanlik WHERE gecerlilik @> current_date
+        ) r ON r.kisi_id = k.kisi_id
+       GROUP BY k.kisi_id, k.ad, k.soyad
+       ORDER BY k.kisi_id
+    $v$;
+  END IF;
+END $$;
 
 -- Transkript gorunumunu security_invoker ile yeniden olustur
 CREATE OR REPLACE VIEW v_transkript WITH (security_invoker = true) AS
@@ -268,7 +354,8 @@ SELECT o.kisi_id AS ogrenci_id, o.ogrenci_no, kk.ad || ' ' || kk.soyad AS ad_soy
   JOIN danismanlik dn ON dn.ogrenci_id = o.kisi_id AND dn.gecerlilik @> current_date
   LEFT JOIN v_gno g ON g.ogrenci_id = o.kisi_id;
 
-CREATE OR REPLACE VIEW v_danisan_risk_ozellik WITH (security_invoker = true) AS
+DROP VIEW IF EXISTS v_danisan_risk_ozellik;
+CREATE VIEW v_danisan_risk_ozellik WITH (security_invoker = true) AS
 SELECT o.kisi_id AS ogrenci_id,
        o.ogrenci_no,
        kk.ad || ' ' || kk.soyad AS ad_soyad,
@@ -295,11 +382,16 @@ SELECT o.kisi_id AS ogrenci_id,
             AND ky.donem_id = fn_aktif_donem_id()
             AND ky.durum IN ('onay_bekliyor', 'onayli')
        ), 0) AS aktif_donem_akts,
+       coalesce(p.min_gno, 2.00)::numeric(3,2) AS min_gno,
+       coalesce((
+         SELECT deger::numeric(5,1) FROM parametre WHERE anahtar = 'devamsizlik_siniri_yuzde'
+       ), 30.0)::numeric(5,1) AS devamsizlik_siniri,
        rt.skor AS kayitli_skor,
        rt.ozellikler AS kayitli_ozellikler,
        rt.hesap_zamani AS son_hesap_zamani
   FROM ogrenci o
   JOIN kisi kk ON kk.kisi_id = o.kisi_id
+  JOIN program p ON p.program_id = o.program_id
   JOIN danismanlik dn ON dn.ogrenci_id = o.kisi_id AND dn.gecerlilik @> current_date
   LEFT JOIN v_gno g ON g.ogrenci_id = o.kisi_id
   LEFT JOIN LATERAL (
@@ -651,16 +743,131 @@ BEGIN
   VALUES (p_ogrenci, p_danisman, daterange(p_baslangic, NULL, '[)'));
 END $$;
 
--- Yonetici: Parametre guncelle
+-- Yonetici: Parametre guncelle (AKTS kademeleri ve program mezuniyet esiklerini otomatik senkronize eder)
 CREATE OR REPLACE FUNCTION fn_parametre_guncelle(p_anahtar text, p_deger text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_kul int := fn_oturum_kisi_id();
+DECLARE
+  v_kul int := fn_oturum_kisi_id();
+  v_temiz text := trim(coalesce(p_deger, ''));
+  v_eski_int int;
+  v_yeni_int int;
+  v_fark int;
+  v_orta int;
+  v_yuksek int;
+  v_yeni_num numeric;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM kisi_rol WHERE kisi_id = v_kul AND rol = 'yonetici') THEN
     RAISE EXCEPTION 'YETKISIZ: yalnizca yonetici parametre guncelleyebilir';
   END IF;
-  UPDATE parametre SET deger = p_deger WHERE anahtar = p_anahtar;
-  IF NOT FOUND THEN RAISE EXCEPTION 'KAYIT_BULUNAMADI: %', p_anahtar; END IF;
+  IF NOT EXISTS (SELECT 1 FROM parametre WHERE anahtar = p_anahtar) THEN
+    RAISE EXCEPTION 'KAYIT_BULUNAMADI: %', p_anahtar;
+  END IF;
+
+  IF p_anahtar = 'akts_limit_varsayilan' THEN
+    BEGIN
+      v_yeni_int := v_temiz::int;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: akts_limit_varsayilan tam sayi olmalidir (6..90)';
+    END;
+    IF v_yeni_int < 6 OR v_yeni_int > 90 THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: akts_limit_varsayilan 6 ile 90 arasinda olmalidir';
+    END IF;
+    SELECT coalesce(deger::int, 30) INTO v_eski_int FROM parametre WHERE anahtar = 'akts_limit_varsayilan';
+    v_fark := v_yeni_int - v_eski_int;
+
+    UPDATE parametre SET deger = v_yeni_int::text WHERE anahtar = 'akts_limit_varsayilan';
+    UPDATE akts_limit_kural SET max_akts = v_yeni_int WHERE min_gno = 0.00;
+
+    IF v_fark <> 0 THEN
+      SELECT greatest(v_yeni_int, least(90, coalesce(deger::int, 45) + v_fark))
+        INTO v_orta FROM parametre WHERE anahtar = 'akts_limit_orta';
+      SELECT greatest(coalesce(v_orta, v_yeni_int), least(90, coalesce(deger::int, 50) + v_fark))
+        INTO v_yuksek FROM parametre WHERE anahtar = 'akts_limit_yuksek';
+
+      IF v_orta IS NOT NULL THEN
+        UPDATE parametre SET deger = v_orta::text WHERE anahtar = 'akts_limit_orta';
+        UPDATE akts_limit_kural SET max_akts = v_orta WHERE min_gno = 2.50;
+      END IF;
+      IF v_yuksek IS NOT NULL THEN
+        UPDATE parametre SET deger = v_yuksek::text WHERE anahtar = 'akts_limit_yuksek';
+        UPDATE akts_limit_kural SET max_akts = v_yuksek WHERE min_gno = 3.00;
+      END IF;
+    END IF;
+
+  ELSIF p_anahtar = 'akts_limit_orta' THEN
+    BEGIN
+      v_yeni_int := v_temiz::int;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: akts_limit_orta tam sayi olmalidir (6..90)';
+    END;
+    IF v_yeni_int < 6 OR v_yeni_int > 90 THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: akts_limit_orta 6 ile 90 arasinda olmalidir';
+    END IF;
+    UPDATE parametre SET deger = v_yeni_int::text WHERE anahtar = 'akts_limit_orta';
+    UPDATE akts_limit_kural SET max_akts = v_yeni_int WHERE min_gno = 2.50;
+
+  ELSIF p_anahtar = 'akts_limit_yuksek' THEN
+    BEGIN
+      v_yeni_int := v_temiz::int;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: akts_limit_yuksek tam sayi olmalidir (6..90)';
+    END;
+    IF v_yeni_int < 6 OR v_yeni_int > 90 THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: akts_limit_yuksek 6 ile 90 arasinda olmalidir';
+    END IF;
+    UPDATE parametre SET deger = v_yeni_int::text WHERE anahtar = 'akts_limit_yuksek';
+    UPDATE akts_limit_kural SET max_akts = v_yeni_int WHERE min_gno = 3.00;
+
+  ELSIF p_anahtar = 'mezuniyet_min_gno' THEN
+    BEGIN
+      v_yeni_num := round(replace(v_temiz, ',', '.')::numeric, 2);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: mezuniyet_min_gno sayisal olmalidir (orn: 2.00)';
+    END;
+    IF v_yeni_num < 0.00 OR v_yeni_num > 4.00 THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: mezuniyet_min_gno 0.00 ile 4.00 arasinda olmalidir';
+    END IF;
+    UPDATE parametre SET deger = to_char(v_yeni_num, 'FM990.00') WHERE anahtar = 'mezuniyet_min_gno';
+    UPDATE program SET min_gno = v_yeni_num;
+
+  ELSIF p_anahtar = 'mezuniyet_toplam_akts' THEN
+    BEGIN
+      v_yeni_int := v_temiz::int;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: mezuniyet_toplam_akts tam sayi olmalidir (30..300)';
+    END;
+    IF v_yeni_int < 30 OR v_yeni_int > 300 THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: mezuniyet_toplam_akts 30 ile 300 arasinda olmalidir';
+    END IF;
+    UPDATE parametre SET deger = v_yeni_int::text WHERE anahtar = 'mezuniyet_toplam_akts';
+    UPDATE program SET toplam_akts = v_yeni_int;
+
+  ELSIF p_anahtar = 'devamsizlik_siniri_yuzde' THEN
+    BEGIN
+      v_yeni_int := v_temiz::int;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: devamsizlik_siniri_yuzde tam sayi olmalidir (5..100)';
+    END;
+    IF v_yeni_int < 5 OR v_yeni_int > 100 THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: devamsizlik_siniri_yuzde 5 ile 100 arasinda olmalidir';
+    END IF;
+    UPDATE parametre SET deger = v_yeni_int::text WHERE anahtar = 'devamsizlik_siniri_yuzde';
+
+  ELSIF p_anahtar = 'tekrar_ders_kurali' THEN
+    IF v_temiz NOT IN ('son', 'en_yuksek') THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: tekrar_ders_kurali yalnizca son veya en_yuksek olabilir';
+    END IF;
+    UPDATE parametre SET deger = v_temiz WHERE anahtar = 'tekrar_ders_kurali';
+
+  ELSIF p_anahtar = 'akts_kilidi' THEN
+    IF v_temiz NOT IN ('acik', 'kapali') THEN
+      RAISE EXCEPTION 'GECERSIZ_GECIS: akts_kilidi yalnizca acik veya kapali olabilir';
+    END IF;
+    UPDATE parametre SET deger = v_temiz WHERE anahtar = 'akts_kilidi';
+
+  ELSE
+    UPDATE parametre SET deger = v_temiz WHERE anahtar = p_anahtar;
+  END IF;
 END $$;
 
 -- Belge uret ve dogrula

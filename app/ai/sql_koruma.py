@@ -42,6 +42,9 @@ ROL_IZINLI_GORUNUMLER: dict[str, dict[str, str]] = {
         "v_mufredat_listesi": "Program müfredatları ve giriş yılları",
         "v_kayitlarim": "Tüm ders kayıtları",
         "v_transkript": "Tüm transkript satırları",
+        "v_yonetici_ogrenciler": "Sistemdeki tüm öğrenciler, danışmanları ve GNO/AKTS özetleri",
+        "v_yonetici_akademisyenler": "Sistemdeki öğretim üyeleri, aktif şube ve danışan sayıları",
+        "v_yonetici_dersler": "Müfredattaki tüm dersler, önkoşullar ve aktif şube sayıları",
     },
     "rol_yonetici": {
         "v_parametreler": "Sistem yönetmelik parametreleri (anahtar, deger, aciklama)",
@@ -50,6 +53,9 @@ ROL_IZINLI_GORUNUMLER: dict[str, dict[str, str]] = {
         "v_mufredat_listesi": "Program müfredatları",
         "v_kayitlarim": "Tüm ders kayıtları",
         "v_transkript": "Tüm transkript satırları",
+        "v_yonetici_ogrenciler": "Sistemdeki tüm öğrenciler, danışmanları ve GNO/AKTS özetleri",
+        "v_yonetici_akademisyenler": "Sistemdeki öğretim üyeleri, aktif şube ve danışan sayıları",
+        "v_yonetici_dersler": "Müfredattaki tüm dersler, önkoşullar ve aktif şube sayıları",
     },
 }
 
