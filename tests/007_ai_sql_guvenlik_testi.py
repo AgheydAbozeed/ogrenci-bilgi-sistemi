@@ -3,7 +3,7 @@ tests/007_ai_sql_guvenlik_testi.py — AI NL→SQL beyaz liste ve salt-okunur ko
 """
 import unittest
 
-from app.ai.ders_oneri import ders_basari_tahmini_hesapla
+from app.ai.ders_oneri import ders_basari_tahmini_hesapla, uc_plan_karti_olustur
 from app.ai.risk_motor import lojistik_risk_hesapla, model_degerlendirme_metrikleri
 from app.ai.sablon_motor import NIYET_SABLONLARI, niyet_siniflandir
 from app.ai.sql_koruma import SemaKatalogu, SqlGuvenlikHatasi, sql_dogrula
@@ -131,6 +131,30 @@ class TestAiSqlGuvenlik(unittest.TestCase):
         self.assertTrue(35 <= secmeli_yuksek_gno.basari_yuzde <= 98)
         self.assertTrue(35 <= zor_tekrar_dusuk_gno.basari_yuzde <= 98)
         self.assertGreater(secmeli_yuksek_gno.basari_yuzde, zor_tekrar_dusuk_gno.basari_yuzde)
+
+    def test_uc_plan_karti_kisit_ve_siralamasi(self):
+        ornek_subeler = [
+            {"sube_id": 1, "ders_kod": "BIL201", "ders_ad": "Veri Yapıları", "akts": 6, "saatler": "Pzt 1, Pzt 2", "durum": "alinabilir"},
+            {"sube_id": 2, "ders_kod": "BIL202", "ders_ad": "Veritabanı", "akts": 6, "saatler": "Sal 1, Sal 2", "durum": "alinabilir"},
+            {"sube_id": 3, "ders_kod": "MAT201", "ders_ad": "Dif. Denklemler", "akts": 6, "saatler": "Car 1, Car 2", "durum": "alinabilir"},
+            {"sube_id": 4, "ders_kod": "SEC101", "ders_ad": "Seçmeli A", "akts": 6, "saatler": "Per 1, Per 2", "durum": "alinabilir"},
+            {"sube_id": 5, "ders_kod": "SEC102", "ders_ad": "Seçmeli B", "akts": 6, "saatler": "Cum 1, Cum 2", "durum": "alinabilir"},
+            {"sube_id": 6, "ders_kod": "BIL301", "ders_ad": "Yapay Zeka", "akts": 6, "saatler": "Pzt 1, Pzt 2", "durum": "onkosul_eksik"},
+        ]
+        planlar = uc_plan_karti_olustur(
+            subeler_veri=ornek_subeler,
+            akts_limiti=24,
+            mevcut_secili_akts=0,
+            ogrenci_gno=2.80,
+            ogrenci_sinif=2,
+        )
+        self.assertEqual([p.kod for p in planlar], ["hizli", "dengeli", "guvenli"])
+        for p in planlar:
+            self.assertLessEqual(p.toplam_akts, 24)
+            self.assertTrue(all(s["durum"] == "alinabilir" for s in p.subeler))
+            self.assertTrue(len(p.gerekce) > 20)
+        self.assertGreaterEqual(planlar[0].toplam_akts, planlar[2].toplam_akts)
+        self.assertGreaterEqual(planlar[2].ortalama_basari_yuzde, planlar[0].ortalama_basari_yuzde)
 
 
 if __name__ == "__main__":

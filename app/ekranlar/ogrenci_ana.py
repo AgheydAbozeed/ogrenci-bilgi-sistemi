@@ -10,8 +10,12 @@ from app.db import Veritabani, hata_coz, hata_goster, HATA_SABLONLARI
 from app.stil import (
     OLCULER, DURUM_ROZETLERI, akts_cubuk_kurali, rozet_formatla, aktif_palet
 )
-from app.ai.kimlik import AIRozet, AIDemoEtiket
-from app.ai.ders_oneri import ders_basari_tahmini_hesapla
+from app.ai.kimlik import AIRozet, AIDemoEtiket, AIDugme
+from app.ai.ders_oneri import (
+    ProgramPlanKarti,
+    ders_basari_tahmini_hesapla,
+    uc_plan_karti_olustur,
+)
 
 GUN_KISA_HARITA = {
     "pzt": (0, "Pazartesi"),
@@ -443,6 +447,13 @@ class OgrenciDersSecimi(QWidget):
         ust.addWidget(baslik)
         ust.addStretch()
 
+        btn_ai_plan = AIDugme("✦  Bana Uygun Programı Öner")
+        btn_ai_plan.setToolTip(
+            "✦ AI ile Hızlı / Dengeli / Güvenli 3 alternatif ders planı oluşturur (Kısıtları DB doğrular)"
+        )
+        btn_ai_plan.clicked.connect(self.program_onerisi_goster)
+        ust.addWidget(btn_ai_plan)
+
         btn_takvim = QPushButton("📅  Tam Ekran Çakışma Matrisi")
         btn_takvim.setObjectName("IkincilBtn")
         btn_takvim.clicked.connect(self.haftalik_program_goster)
@@ -650,9 +661,13 @@ class OgrenciDersSecimi(QWidget):
         ogr_sinif = int(ana_ozet.get("sinif") or 1)
         ogr_min_gno = float(ana_ozet.get("min_gno") or 2.00)
         kalinan_satirlar = self.db.sorgula(
-            "SELECT DISTINCT ders_kod FROM v_transkript WHERE gecer_mi = false"
+            "SELECT DISTINCT kod FROM v_transkript WHERE durum = 'kaldi'"
         )
-        kalinan_kodlar = {str(x["ders_kod"]) for x in kalinan_satirlar if x.get("ders_kod")}
+        kalinan_kodlar = {str(x["kod"]) for x in kalinan_satirlar if x.get("kod")}
+        self._ogr_gno = ogr_gno
+        self._ogr_sinif = ogr_sinif
+        self._ogr_min_gno = ogr_min_gno
+        self._kalinan_kodlar = kalinan_kodlar
         pal = aktif_palet()
 
         # Açık şubeleri oku ve tabloya yerleştir
@@ -1015,3 +1030,170 @@ class OgrenciDersSecimi(QWidget):
 
         lay.addWidget(grid, 1)
         dlg.exec()
+
+    def program_onerisi_goster(self):
+        from PySide6.QtWidgets import QDialog
+
+        pal = aktif_palet()
+        planlar = uc_plan_karti_olustur(
+            subeler_veri=self.subeler_veri,
+            akts_limiti=self.aktif_limit,
+            mevcut_secili_akts=self.secili_akts,
+            dolu_slotlar=self.dolu_slotlar,
+            kalinan_kodlar=getattr(self, "_kalinan_kodlar", set()),
+            ogrenci_gno=getattr(self, "_ogr_gno", 2.50),
+            ogrenci_sinif=getattr(self, "_ogr_sinif", 1),
+            min_gno=getattr(self, "_ogr_min_gno", 2.00),
+        )
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("✦ AI Ders Programı Önerisi — 3 Alternatif Plan Kartı")
+        dlg.resize(1060, 560)
+        ana_lay = QVBoxLayout(dlg)
+        ana_lay.setContentsMargins(18, 16, 18, 16)
+        ana_lay.setSpacing(12)
+
+        ust = QHBoxLayout()
+        baslik = QLabel("<b>✦  Bana Uygun Programı Öner — 3 Alternatif Plan (Hızlı / Dengeli / Güvenli)</b>")
+        baslik.setObjectName("SayfaBaslik")
+        ust.addWidget(baslik)
+        ust.addStretch()
+        ust.addWidget(AIRozet(guven=89))
+        ust.addWidget(AIDemoEtiket())
+        ana_lay.addLayout(ust)
+
+        aciklama = QLabel(
+            f"Mevcut dönem yükünüz: <b>{self.secili_akts} / {self.aktif_limit} AKTS</b>. "
+            "AI yalnızca önkoşul ve saat çakışması engeli olmayan açık şubeleri sıralar; "
+            "sepete ekleme sırasında tüm yönetmelik kısıtları PostgreSQL fonksiyonu (<code>fn_sepete_ekle</code>) tarafından doğrulanır."
+        )
+        aciklama.setWordWrap(True)
+        aciklama.setStyleSheet(
+            f"background-color: {pal['ai_rozet_zemin']}; color: {pal['ai_rozet_metin']}; "
+            f"border: 1px solid {pal['ai_kenar']}; border-radius: 8px; padding: 8px 12px; font-size: 9pt;"
+        )
+        ana_lay.addWidget(aciklama)
+
+        kartlar_lay = QHBoxLayout()
+        kartlar_lay.setSpacing(12)
+
+        for kart_veri in planlar:
+            k_cerceve = QFrame()
+            k_cerceve.setObjectName("AIKart")
+            k_lay = QVBoxLayout(k_cerceve)
+            k_lay.setContentsMargins(14, 12, 14, 12)
+            k_lay.setSpacing(8)
+
+            k_ust = QHBoxLayout()
+            lbl_kb = QLabel(f"<b>{kart_veri.baslik}</b>")
+            lbl_kb.setStyleSheet(f"color: {pal['ai_rozet_metin']}; font-size: 10.5pt; border: none;")
+            k_ust.addWidget(lbl_kb)
+            k_ust.addStretch()
+            k_ust.addWidget(AIRozet(model=kart_veri.model_surum, guven=kart_veri.guven))
+            k_lay.addLayout(k_ust)
+
+            lbl_alt = QLabel(kart_veri.alt_baslik)
+            lbl_alt.setStyleSheet(f"color: {pal['ikincil_metin']}; font-size: 8.5pt; font-weight: 600; border: none;")
+            lbl_alt.setWordWrap(True)
+            k_lay.addWidget(lbl_alt)
+
+            # Metrik rozet satırı
+            metrik_lay = QHBoxLayout()
+            metrik_lay.setSpacing(6)
+            lbl_akts_hap = QLabel(
+                f"+{kart_veri.eklenen_akts} AKTS  (Toplam {kart_veri.toplam_akts}/{kart_veri.akts_limiti})"
+            )
+            lbl_akts_hap.setStyleSheet(
+                f"background-color: {pal['zebra_zemin']}; color: {pal['metin']}; "
+                f"border: 1px solid {pal['kenarlik']}; border-radius: 6px; padding: 3px 8px; font-weight: 700; font-size: 8.5pt;"
+            )
+            metrik_lay.addWidget(lbl_akts_hap)
+
+            lbl_basari_hap = QLabel(f"✦ Ort. Başarı: %{kart_veri.ortalama_basari_yuzde}")
+            lbl_basari_hap.setStyleSheet(
+                f"background-color: {pal['ai_rozet_zemin']}; color: {pal['ai_rozet_metin']}; "
+                f"border: 1px solid {pal['ai_kenar']}; border-radius: 6px; padding: 3px 8px; font-weight: 700; font-size: 8.5pt;"
+            )
+            metrik_lay.addWidget(lbl_basari_hap)
+            metrik_lay.addStretch()
+            k_lay.addLayout(metrik_lay)
+
+            # Gerekçe cümlesi
+            lbl_gerekce = QLabel(kart_veri.gerekce)
+            lbl_gerekce.setWordWrap(True)
+            lbl_gerekce.setStyleSheet(
+                f"color: {pal['metin']}; font-size: 8.5pt; background-color: {pal['zebra_zemin']}; "
+                f"border-radius: 6px; padding: 7px 9px; border: none;"
+            )
+            k_lay.addWidget(lbl_gerekce)
+
+            # Önerilen şubeler tablosu
+            tbl = QTableWidget(len(kart_veri.subeler), 4)
+            tbl.setHorizontalHeaderLabels(["Kod", "Ders Adı", "AKTS", "✦ Başarı %"])
+            tbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            tbl.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+            tbl.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+            tbl.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+            tbl.verticalHeader().setVisible(False)
+            tbl.verticalHeader().setDefaultSectionSize(30)
+            tbl.setEditTriggers(QTableWidget.NoEditTriggers)
+            tbl.setSelectionMode(QTableWidget.NoSelection)
+
+            for r_idx, s in enumerate(kart_veri.subeler):
+                tbl.setItem(r_idx, 0, QTableWidgetItem(str(s.get("ders_kod") or "")))
+                tbl.setItem(r_idx, 1, QTableWidgetItem(str(s.get("ders_ad") or "")))
+                it_a = QTableWidgetItem(str(s.get("akts") or ""))
+                it_a.setTextAlignment(Qt.AlignCenter)
+                tbl.setItem(r_idx, 2, it_a)
+                it_b = QTableWidgetItem(f"%{s.get('tahmini_basari_yuzde', 80)}")
+                it_b.setTextAlignment(Qt.AlignCenter)
+                it_b.setForeground(QBrush(QColor(pal["ai_rozet_metin"])))
+                f_b = QFont()
+                f_b.setBold(True)
+                it_b.setFont(f_b)
+                tbl.setItem(r_idx, 3, it_b)
+
+            k_lay.addWidget(tbl, 1)
+
+            btn_uygula = AIDugme(
+                f"✦  {kart_veri.baslik.split()[1]} Planı Sepete Ekle ({len(kart_veri.subeler)} Ders)"
+            )
+            btn_uygula.setEnabled(len(kart_veri.subeler) > 0)
+            btn_uygula.clicked.connect(lambda _, kv=kart_veri, d=dlg: self._plani_sepete_uygula(kv, d))
+            k_lay.addWidget(btn_uygula)
+
+            kartlar_lay.addWidget(k_cerceve, 1)
+
+        ana_lay.addLayout(kartlar_lay, 1)
+        dlg.exec()
+
+    def _plani_sepete_uygula(self, kart: ProgramPlanKarti, dlg):
+        eklenen = 0
+        hatalar: list[str] = []
+        for s in kart.subeler:
+            sid = s.get("sube_id")
+            if not sid:
+                continue
+            try:
+                self.db.calistir("SELECT fn_sepete_ekle(%s)", (sid,))
+                eklenen += 1
+            except Exception as e:
+                hatalar.append(
+                    f"• {s.get('ders_kod')}: {hata_coz(e, {'ders': s.get('ders_kod'), 'limit': self.aktif_limit})}"
+                )
+        self.yenile()
+        dlg.accept()
+        if hatalar:
+            QMessageBox.warning(
+                self,
+                "Plan Kısmen Uygulandı",
+                f"{eklenen} ders sepete eklendi.\n\nVeritabanı kısıt kontrolü nedeniyle eklenemeyenler:\n"
+                + "\n".join(hatalar),
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "✦ Plan Sepete Eklendi",
+                f"{kart.baslik} kapsamındaki {eklenen} ders (+{kart.eklenen_akts} AKTS) sepetinize eklendi.\n"
+                "Danışman onayına göndermek için 'Sepeti Kesinleştir' düğmesini kullanabilirsiniz.",
+            )

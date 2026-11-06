@@ -595,7 +595,9 @@ class OgrenciNotlarTranskript(QWidget):
         l_not.setContentsMargins(14, 12, 14, 12)
         l_not.addWidget(QLabel("<b>📝  İlan Edilmiş Değerlendirme Bileşeni Notlarım (RLS Korumalı)</b>"))
         self.tbl_notlar = QTableWidget(0, 5)
-        self.tbl_notlar.setHorizontalHeaderLabels(["Kayıt #", "Ders Kodu", "Bileşen", "Ağırlık (%)", "Puan"])
+        self.tbl_notlar.setHorizontalHeaderLabels(
+            ["Kayıt #", "Ders Kodu", "Vize (%40)", "Final (%60)", "Ağırlıklı Ortalama"]
+        )
         self.tbl_notlar.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tbl_notlar.verticalHeader().setDefaultSectionSize(OLCULER["tablo_satir_yukseklik"])
         self.tbl_notlar.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -658,25 +660,64 @@ class OgrenciNotlarTranskript(QWidget):
 
         ozet = self.db.tek_satir("SELECT * FROM v_ana_sayfa") or {}
         notlar = self.db.sorgula("SELECT * FROM v_not_detay ORDER BY kayit_id DESC, bilesen")
-        tr = self.db.sorgula(
+        ham_tr = self.db.sorgula(
             "SELECT * FROM v_transkript ORDER BY yil, CASE donem WHEN 'guz' THEN 1 WHEN 'bahar' THEN 2 ELSE 3 END, kod"
         )
+
+        # Mükerrer ders kayıtlarını önlemek için ders koduna göre tekilleştir (son dönemi koru)
+        tr_harita: OrderedDict[str, dict] = OrderedDict()
+        for r in ham_tr:
+            tr_harita[str(r["kod"])] = r
+        tr = list(tr_harita.values())
 
         self.kart_lay.addWidget(bilgi_karti("Genel Not Ortalaması", str(ozet.get("gno") or "-"), "A+", "#2563EB"))
         self.kart_lay.addWidget(bilgi_karti("Dönem Not Ortalaması", str(ozet.get("dno") or "-"), "📊", "#2563EB"))
         self.kart_lay.addWidget(bilgi_karti("Geçilen Toplam AKTS", f"{ozet.get('gecilen_akts', 0)} AKTS", "±÷", "#15803D"))
         self.kart_lay.addWidget(bilgi_karti("Transkript Ders Sayısı", f"{len(tr)} Ders", "📚", "#2563EB"))
 
+        # Bileşen notlarını (Vize / Final) her ders tek satır olacak şekilde birleştir
+        ders_not_haritasi: OrderedDict[str, dict] = OrderedDict()
+        for r in notlar:
+            d_kod = str(r["ders_kod"])
+            k_id = int(r["kayit_id"])
+            if d_kod not in ders_not_haritasi:
+                ders_not_haritasi[d_kod] = {
+                    "kayit_id": k_id,
+                    "ders_kod": d_kod,
+                    "vize": None,
+                    "final": None,
+                    "toplam_puan": 0.0,
+                    "toplam_agirlik": 0.0,
+                }
+            kayit_grup = ders_not_haritasi[d_kod]
+            # Yalnızca ilgili dersin en güncel kayit_id'sine ait bileşenleri al
+            if k_id != kayit_grup["kayit_id"]:
+                continue
+            b_ad = str(r.get("bilesen") or "").strip().lower()
+            puan = float(r.get("puan") or 0.0)
+            agirlik = float(r.get("agirlik") or 0.0)
+            if "vize" in b_ad and kayit_grup["vize"] is None:
+                kayit_grup["vize"] = puan
+                kayit_grup["toplam_puan"] += puan * (agirlik / 100.0)
+                kayit_grup["toplam_agirlik"] += agirlik
+            elif "final" in b_ad and kayit_grup["final"] is None:
+                kayit_grup["final"] = puan
+                kayit_grup["toplam_puan"] += puan * (agirlik / 100.0)
+                kayit_grup["toplam_agirlik"] += agirlik
+
         self.tbl_notlar.setUpdatesEnabled(False)
         self.tbl_notlar.setRowCount(0)
-        for r in notlar:
+        for g in ders_not_haritasi.values():
             row = self.tbl_notlar.rowCount()
             self.tbl_notlar.insertRow(row)
-            self.tbl_notlar.setItem(row, 0, QTableWidgetItem(str(r["kayit_id"])))
-            self.tbl_notlar.setItem(row, 1, QTableWidgetItem(str(r["ders_kod"])))
-            self.tbl_notlar.setItem(row, 2, QTableWidgetItem(str(r["bilesen"])))
-            self.tbl_notlar.setItem(row, 3, QTableWidgetItem(str(r["agirlik"])))
-            self.tbl_notlar.setItem(row, 4, QTableWidgetItem(str(r["puan"])))
+            self.tbl_notlar.setItem(row, 0, QTableWidgetItem(str(g["kayit_id"])))
+            self.tbl_notlar.setItem(row, 1, QTableWidgetItem(g["ders_kod"]))
+            vize_str = f"{g['vize']:.1f}" if g["vize"] is not None else "-"
+            final_str = f"{g['final']:.1f}" if g["final"] is not None else "-"
+            ort_str = f"{g['toplam_puan']:.1f}" if g["toplam_agirlik"] > 0 else "-"
+            self.tbl_notlar.setItem(row, 2, QTableWidgetItem(vize_str))
+            self.tbl_notlar.setItem(row, 3, QTableWidgetItem(final_str))
+            self.tbl_notlar.setItem(row, 4, QTableWidgetItem(ort_str))
         self.tbl_notlar.setUpdatesEnabled(True)
 
         self.tbl_tr.setUpdatesEnabled(False)

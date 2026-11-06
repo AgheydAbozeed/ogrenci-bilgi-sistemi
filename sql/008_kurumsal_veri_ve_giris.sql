@@ -143,7 +143,9 @@ CROSS JOIN (VALUES
   ('SEC104',6,'secmeli'), ('SEC105',6,'secmeli'), ('SEC106',6,'secmeli')
 ) v(kod, dn, tur)
 JOIN ders d ON d.kod = v.kod
-ON CONFLICT (mufredat_id, ders_id) DO NOTHING;
+ON CONFLICT (mufredat_id, ders_id) DO UPDATE
+  SET donem_no = EXCLUDED.donem_no,
+      tur = EXCLUDED.tur;
 
 INSERT INTO onkosul (ders_id, onkosul_ders_id, min_harf)
 SELECT a.ders_id, b.ders_id, v.min_harf
@@ -386,6 +388,27 @@ ON CONFLICT (sube_id, ad) DO NOTHING;
 --   2024 girisliler -> 2024 Guz (1), 2024 Bahar (2), 2025 Guz (3), 2025 Bahar (4) [4 donem!]
 --   2025 girisliler -> 2025 Guz (1), 2025 Bahar (2) [2 donem!]
 
+-- Varsa ayni ogrenci ve ayni ders icin farkli donemlerde olusmus mukerrer kayitlari temizle (en eski kaydi koru)
+DO $$
+BEGIN
+  CREATE TEMP TABLE _mukerrer_kayit ON COMMIT DROP AS
+  SELECT k.kayit_id
+  FROM kayit k
+  WHERE EXISTS (
+    SELECT 1 FROM kayit k2
+     WHERE k2.ogrenci_id = k.ogrenci_id
+       AND k2.ders_id = k.ders_id
+       AND k2.kayit_id < k.kayit_id
+  );
+
+  DELETE FROM ogrenci_slot WHERE kayit_id IN (SELECT kayit_id FROM _mukerrer_kayit);
+  DELETE FROM yoklama      WHERE kayit_id IN (SELECT kayit_id FROM _mukerrer_kayit);
+  DELETE FROM not_kaydi    WHERE kayit_id IN (SELECT kayit_id FROM _mukerrer_kayit);
+  DELETE FROM kayit_sonuc  WHERE kayit_id IN (SELECT kayit_id FROM _mukerrer_kayit);
+  DELETE FROM kayit_onay   WHERE kayit_id IN (SELECT kayit_id FROM _mukerrer_kayit);
+  DELETE FROM kayit        WHERE kayit_id IN (SELECT kayit_id FROM _mukerrer_kayit);
+END $$;
+
 -- Gecmis donem kayitlarini temiz bir sekilde tamamla (25102 ve 25103'un ozel test notlarini koruyarak)
 INSERT INTO kayit (ogrenci_id, sube_id, ders_id, donem_id, durum)
 SELECT o.kisi_id, s.sube_id, d.ders_id, dn.donem_id, 'onayli'
@@ -399,7 +422,7 @@ WHERE o.ogrenci_no NOT IN ('25102', '25103', '25204')
   AND (md.tur = 'zorunlu' OR d.kod IN ('SEC101', 'SEC102', 'SEC103'))
   AND NOT EXISTS (
     SELECT 1 FROM kayit k
-     WHERE k.ogrenci_id = o.kisi_id AND k.donem_id = dn.donem_id AND k.ders_id = d.ders_id
+     WHERE k.ogrenci_id = o.kisi_id AND k.ders_id = d.ders_id
   );
 
 -- Gecmis donem sonuclarini ogrenci profiline gore uret
@@ -502,11 +525,11 @@ FROM (VALUES
   -- 10102 Danisanlari
   ('23102', 'SEC104', 'onayli'),
   ('23102', 'SEC105', 'onay_bekliyor'),
-  ('23103', 'MAT101', 'onay_bekliyor'),
+  ('23103', 'SEC105', 'onay_bekliyor'),
   ('24102', 'BIL301', 'onayli'),
   ('24102', 'SEC101', 'onay_bekliyor'),
-  ('24103', 'FIZ101', 'onayli'),
-  ('24103', 'BIL103', 'onay_bekliyor'),
+  ('24103', 'BIL301', 'onayli'),
+  ('24103', 'BIL302', 'onay_bekliyor'),
   ('25204', 'BIL103', 'onayli'),
   -- 10103 Danisanlari
   ('23305', 'SEC104', 'onayli'),
@@ -525,9 +548,9 @@ FROM (VALUES
   ('23206', 'SEC106', 'onay_bekliyor'),
   ('24204', 'BIL301', 'onayli'),
   ('24204', 'SEC102', 'onay_bekliyor'),
-  ('24206', 'FIZ101', 'onayli'),
-  ('24206', 'BIL103', 'onay_bekliyor'),
-  ('25206', 'FIZ101', 'onayli'),
+  ('24206', 'BIL301', 'onayli'),
+  ('24206', 'SEC102', 'onay_bekliyor'),
+  ('25206', 'BIL203', 'onayli'),
   ('25206', 'MAT201', 'onay_bekliyor')
 ) v(ogr_no, kod, durum)
 JOIN ogrenci o ON o.ogrenci_no = v.ogr_no
@@ -535,7 +558,7 @@ JOIN ders d    ON d.kod = v.kod
 JOIN donem dn  ON dn.yil = 2026 AND dn.tur = 'guz'
 JOIN sube s    ON s.ders_id = d.ders_id AND s.donem_id = dn.donem_id AND s.sube_no = 1
 WHERE NOT EXISTS (
-  SELECT 1 FROM kayit k WHERE k.ogrenci_id = o.kisi_id AND k.donem_id = dn.donem_id AND k.ders_id = d.ders_id
+  SELECT 1 FROM kayit k WHERE k.ogrenci_id = o.kisi_id AND k.ders_id = d.ders_id
 );
 
 -- Yoklama kayitlari (Katilim % ozelliginin her ogrenci icin gercekci dagilmasi icin)
