@@ -31,9 +31,9 @@ ON CONFLICT (anahtar) DO UPDATE
       aciklama = EXCLUDED.aciklama;
 
 -- Akademik yapi ---------------------------------------------------------
-INSERT INTO bolum (ad) VALUES ('Yapay Zeka ve Veri Muhendisligi');
+INSERT INTO bolum (ad) VALUES ('Yapay Zeka ve Veri Mühendisliği');
 INSERT INTO program (bolum_id, ad, toplam_akts)
-  SELECT bolum_id, 'Yapay Zeka ve Veri Muhendisligi (Lisans)', 240 FROM bolum;
+  SELECT bolum_id, 'Yapay Zeka ve Veri Mühendisliği (Lisans)', 240 FROM bolum;
 INSERT INTO mufredat (program_id, giris_yili)
   SELECT p.program_id, v.y FROM program p, (VALUES (2025), (2026)) v(y);
 
@@ -63,9 +63,9 @@ JOIN ders a ON a.kod = v.ders
 JOIN ders b ON b.kod = v.onk;
 
 INSERT INTO gereksinim_grubu (mufredat_id, ad, tur, min_ders, min_akts, oncelik)
-SELECT mufredat_id, 'Zorunlu Cekirdek', 'zorunlu', 7, 42, 10 FROM mufredat
+SELECT mufredat_id, 'Zorunlu Çekirdek', 'zorunlu', 7, 42, 10 FROM mufredat
 UNION ALL
-SELECT mufredat_id, 'Secmeli Havuz', 'secmeli_havuz', 2, 12, 20 FROM mufredat;
+SELECT mufredat_id, 'Seçmeli Havuz', 'secmeli_havuz', 2, 12, 20 FROM mufredat;
 
 INSERT INTO gereksinim_grubu_ders (grup_id, ders_id)
 SELECT g.grup_id, md.ders_id

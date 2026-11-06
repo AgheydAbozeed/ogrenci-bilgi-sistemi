@@ -222,7 +222,9 @@ class AsistanYanitKarti(QFrame):
             tablo = QTableWidget(len(yanit.satirlar), len(yanit.sutunlar))
             etiketler = [SUTUN_ETIKETLERI.get(s, s) for s in yanit.sutunlar]
             tablo.setHorizontalHeaderLabels(etiketler)
-            tablo.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            header = tablo.horizontalHeader()
+            header.setSectionResizeMode(QHeaderView.ResizeToContents)
+            header.setStretchLastSection(True)
             tablo.verticalHeader().setDefaultSectionSize(30)
             tablo.verticalHeader().setVisible(False)
             tablo.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -236,7 +238,7 @@ class AsistanYanitKarti(QFrame):
                         metin = "-" if deger is None else str(deger)
                     tablo.setItem(r_idx, c_idx, QTableWidgetItem(metin))
             gorunur_satir = min(max(len(yanit.satirlar), 1), 6)
-            tablo.setFixedHeight(34 + gorunur_satir * 30)
+            tablo.setFixedHeight(36 + gorunur_satir * 30)
             yerlesim.addWidget(tablo)
 
         # 5. Alt araç çubuğu: satır sayısı + "Kullanılan SQL'i göster"
@@ -330,7 +332,8 @@ class AIAsistanPaneli(QFrame):
 
         # Hızlı soru ızgarası (2x2 düzenli kartlar)
         cip_kutu = QFrame()
-        cip_kutu.setStyleSheet("border-bottom: 1px solid rgba(148,163,184,0.25);")
+        cip_kutu.setObjectName("AICipKutu")
+        cip_kutu.setStyleSheet("QFrame#AICipKutu { border-bottom: 1px solid rgba(148,163,184,0.25); }")
         self.cip_lay = QVBoxLayout(cip_kutu)
         self.cip_lay.setContentsMargins(14, 8, 14, 10)
         self.cip_lay.setSpacing(6)
@@ -345,6 +348,7 @@ class AIAsistanPaneli(QFrame):
         self.icerik_lay.setContentsMargins(14, 10, 14, 12)
         self.icerik_lay.setSpacing(10)
 
+        self._yanit_kartlari: list[QWidget] = []
         self.lbl_bos = QLabel(
             "Yukarıdaki hazır sorulardan birine tıklayın veya aşağıya kendi sorunuzu yazın.\n"
             "Sorgular yalnızca rolünüzün izinli görünümlerinde (READ ONLY) çalıştırılır."
@@ -411,15 +415,13 @@ class AIAsistanPaneli(QFrame):
         self.cip_lay.addLayout(izgara)
 
     def gecmisi_temizle(self):
-        while self.icerik_lay.count() > 1:
-            item = self.icerik_lay.takeAt(0)
-            w = item.widget()
-            if w and w is not self.lbl_bos:
-                w.deleteLater()
-            elif w is self.lbl_bos:
-                self.icerik_lay.insertWidget(0, self.lbl_bos)
-                break
+        for w in self._yanit_kartlari:
+            self.icerik_lay.removeWidget(w)
+            w.hide()
+            w.deleteLater()
+        self._yanit_kartlari.clear()
         self.lbl_bos.setVisible(True)
+        self.kaydirma.verticalScrollBar().setValue(0)
 
     def _gonder_tiklandi(self):
         metin = self.txt_soru.text().strip()
@@ -434,6 +436,7 @@ class AIAsistanPaneli(QFrame):
             yanit = self.motor.yanitla(soru)
             self.ust_rozet.guncelle(model=yanit.model_surum, guven=yanit.guven)
             kart = AsistanYanitKarti(soru, yanit, self.icerik_w)
+            self._yanit_kartlari.append(kart)
             self.icerik_lay.insertWidget(self.icerik_lay.count() - 1, kart)
             self.kaydirma.verticalScrollBar().setValue(
                 self.kaydirma.verticalScrollBar().maximum()
@@ -445,6 +448,7 @@ class AIAsistanPaneli(QFrame):
                 f"background-color: {aktif_palet()['hata_zemin']}; "
                 f"color: {aktif_palet()['hata_metin']}; padding: 10px; border-radius: 6px;"
             )
+            self._yanit_kartlari.append(hata_lbl)
             self.icerik_lay.insertWidget(self.icerik_lay.count() - 1, hata_lbl)
 
 

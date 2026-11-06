@@ -256,7 +256,7 @@ class DanisanPaneli(QWidget):
         oid = int(ogrenci["ogrenci_id"])
         sonuc = self._risk_sonuclari.get(oid)
         if sonuc:
-            self.radar_karti.sonuc_goster(ogrenci["ad_soyad"], sonuc)
+            self.radar_karti.sonuc_goster(ogrenci["ad_soyad"], sonuc, ogrenci)
 
         self.lbl_mez.setText(f"<b>🎓  {ogrenci['ad_soyad']} — Mezuniyet Grup Denetimi</b>")
         denetim = self.db.sorgula("SELECT * FROM fn_mezuniyet_denetim_danisan(%s)", (oid,))

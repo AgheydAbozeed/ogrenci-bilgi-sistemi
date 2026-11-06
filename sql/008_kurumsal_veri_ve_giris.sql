@@ -37,13 +37,68 @@ ON CONFLICT (ad) DO NOTHING;
 INSERT INTO program (bolum_id, ad, toplam_akts, min_gno)
 SELECT b.bolum_id, b.ad || ' (Lisans)', 240, 2.00
 FROM bolum b
+WHERE b.ad IN ('Bilgisayar Mühendisliği', 'Yazılım Mühendisliği', 'Yapay Zeka ve Veri Mühendisliği')
 ON CONFLICT (bolum_id, ad) DO NOTHING;
 
 INSERT INTO mufredat (program_id, giris_yili)
 SELECT p.program_id, y.yil
 FROM program p
 CROSS JOIN (VALUES (2023), (2024), (2025), (2026)) AS y(yil)
+WHERE p.ad IN (
+  'Bilgisayar Mühendisliği (Lisans)',
+  'Yazılım Mühendisliği (Lisans)',
+  'Yapay Zeka ve Veri Mühendisliği (Lisans)'
+)
 ON CONFLICT (program_id, giris_yili) DO NOTHING;
+
+-- 003_ornek_veri.sql'den gelen ASCII 'Yapay Zeka ve Veri Muhendisligi' mukerrer bolum/program/mufredat kayitlarini
+-- Turkce 'Yapay Zeka ve Veri Mühendisliği' kayitlariyla birlestir ve mukerrerleri temizle
+DO $$
+DECLARE
+  v_eski_bolum int;
+  v_yeni_bolum int;
+  v_eski_prog int;
+  v_yeni_prog int;
+BEGIN
+  SELECT bolum_id INTO v_eski_bolum FROM bolum WHERE ad = 'Yapay Zeka ve Veri Muhendisligi';
+  SELECT bolum_id INTO v_yeni_bolum FROM bolum WHERE ad = 'Yapay Zeka ve Veri Mühendisliği';
+
+  IF v_eski_bolum IS NOT NULL AND v_yeni_bolum IS NOT NULL AND v_eski_bolum <> v_yeni_bolum THEN
+    SELECT program_id INTO v_eski_prog FROM program WHERE bolum_id = v_eski_bolum LIMIT 1;
+    SELECT program_id INTO v_yeni_prog FROM program WHERE bolum_id = v_yeni_bolum LIMIT 1;
+
+    IF v_eski_prog IS NOT NULL AND v_yeni_prog IS NOT NULL THEN
+      UPDATE ogrenci o
+         SET program_id = v_yeni_prog,
+             mufredat_id = COALESCE(
+               (SELECT m2.mufredat_id FROM mufredat m2 WHERE m2.program_id = v_yeni_prog AND m2.giris_yili = o.giris_yili LIMIT 1),
+               (SELECT m2.mufredat_id FROM mufredat m2 WHERE m2.program_id = v_yeni_prog ORDER BY m2.giris_yili DESC LIMIT 1)
+             )
+       WHERE o.program_id = v_eski_prog;
+
+      DELETE FROM gereksinim_grubu_ders
+       WHERE grup_id IN (
+         SELECT gg.grup_id FROM gereksinim_grubu gg
+         JOIN mufredat m ON m.mufredat_id = gg.mufredat_id
+         WHERE m.program_id = v_eski_prog
+       );
+      DELETE FROM gereksinim_grubu
+       WHERE mufredat_id IN (SELECT mufredat_id FROM mufredat WHERE program_id = v_eski_prog);
+      DELETE FROM mufredat_ders
+       WHERE mufredat_id IN (SELECT mufredat_id FROM mufredat WHERE program_id = v_eski_prog);
+      DELETE FROM mufredat WHERE program_id = v_eski_prog;
+      DELETE FROM program WHERE program_id = v_eski_prog;
+    END IF;
+
+    UPDATE ogretim_uyesi SET bolum_id = v_yeni_bolum WHERE bolum_id = v_eski_bolum;
+    DELETE FROM bolum WHERE bolum_id = v_eski_bolum;
+  END IF;
+
+  -- ASCII 'Zorunlu Cekirdek' ve 'Secmeli Havuz' gruplarini da temizle
+  DELETE FROM gereksinim_grubu_ders
+   WHERE grup_id IN (SELECT grup_id FROM gereksinim_grubu WHERE ad IN ('Zorunlu Cekirdek', 'Secmeli Havuz'));
+  DELETE FROM gereksinim_grubu WHERE ad IN ('Zorunlu Cekirdek', 'Secmeli Havuz');
+END $$;
 
 -- 2) DERSLER (Kurumsal Ders Adlari ve AKTS)
 INSERT INTO ders (kod, ad, akts, teorik_saat, uygulama_saat) VALUES

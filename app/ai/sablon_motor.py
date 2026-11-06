@@ -270,7 +270,7 @@ NIYET_SABLONLARI: list[NiyetSablonu] = [
         sql_uret=lambda _soru: (
             "SELECT ders_kod, ders_ad, akts, sube_no, hoca, saatler "
             "FROM v_acik_subeler "
-            "WHERE durum = 'alinabilir' "
+            "WHERE donem_id = fn_aktif_donem_id() AND durum = 'alinabilir' "
             "ORDER BY ders_kod ASC, sube_no ASC",
             {},
         ),
@@ -330,6 +330,7 @@ NIYET_SABLONLARI: list[NiyetSablonu] = [
         sql_uret=lambda _soru: (
             "SELECT gun, ders_saati, ders_kod, sube_no, durum "
             "FROM v_haftalik_program "
+            "WHERE donem_id = fn_aktif_donem_id() "
             "ORDER BY gun ASC, ders_saati ASC",
             {},
         ),
@@ -372,7 +373,7 @@ NIYET_SABLONLARI: list[NiyetSablonu] = [
         sql_uret=lambda _soru: (
             "SELECT ders_kod, ders_ad, akts, durum, neden "
             "FROM v_acik_subeler "
-            "WHERE durum IN ('onkosul_eksik', 'cakisiyor') "
+            "WHERE donem_id = fn_aktif_donem_id() AND durum IN ('onkosul_eksik', 'cakisiyor') "
             "ORDER BY ders_kod ASC",
             {},
         ),
@@ -392,7 +393,7 @@ NIYET_SABLONLARI: list[NiyetSablonu] = [
         ],
         sql_uret=lambda _soru: (
             "SELECT ders_kod, ders_ad, sube_no, ogrenci_sayisi "
-            "FROM v_sube_listem ORDER BY ders_kod ASC, sube_no ASC",
+            "FROM v_sube_listem WHERE donem_id = fn_aktif_donem_id() ORDER BY ders_kod ASC, sube_no ASC",
             {},
         ),
         ozet_uret=_ozet_hoca_subeler,

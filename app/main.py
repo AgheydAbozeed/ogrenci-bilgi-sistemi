@@ -45,49 +45,84 @@ class GirisPenceresi(QDialog):
         self.kullanicilar = self.db.demo_kullanicilar()
 
         self.setWindowTitle("OBS — Kurumsal Kimlik Doğrulama")
-        self.setFixedSize(490, 460)
+        self.setFixedSize(500, 485)
 
         ana = QVBoxLayout(self)
         ana.setContentsMargins(0, 0, 0, 0)
         ana.setSpacing(0)
 
         ust_bant = QFrame()
-        ust_bant.setStyleSheet("background-color: #12355B; border-bottom: 3px solid #2563EB;")
-        ub_lay = QVBoxLayout(ust_bant)
-        ub_lay.setContentsMargins(24, 18, 24, 16)
+        ust_bant.setObjectName("GirisUstBant")
+        ust_bant.setStyleSheet(
+            "QFrame#GirisUstBant { background-color: #0F172A; border: none; }"
+        )
+        ub_lay = QHBoxLayout(ust_bant)
+        ub_lay.setContentsMargins(24, 18, 24, 18)
+        ub_lay.setSpacing(14)
+
+        lbl_arma = QLabel("OBS")
+        lbl_arma.setFixedSize(44, 44)
+        lbl_arma.setAlignment(Qt.AlignCenter)
+        lbl_arma.setStyleSheet(
+            "background-color: #2563EB; color: #FFFFFF; font-size: 11pt; "
+            "font-weight: 800; border-radius: 10px; border: none;"
+        )
+        ub_lay.addWidget(lbl_arma)
+
+        ub_metin = QVBoxLayout()
+        ub_metin.setSpacing(3)
         lbl_b = QLabel("ÖĞRENCİ BİLGİ SİSTEMİ PORTALI")
-        lbl_b.setStyleSheet("color: #FFFFFF; font-size: 14pt; font-weight: 800; letter-spacing: 0.4px;")
+        lbl_b.setStyleSheet(
+            "color: #FFFFFF; font-size: 13pt; font-weight: 800; "
+            "letter-spacing: 0.4px; border: none; background: transparent;"
+        )
         lbl_a = QLabel("Öğrenci ve Akademisyen Merkezi Kimlik Doğrulama Sistemi")
-        lbl_a.setStyleSheet("color: #93C5FD; font-size: 9.5pt;")
-        ub_lay.addWidget(lbl_b)
-        ub_lay.addWidget(lbl_a)
+        lbl_a.setStyleSheet(
+            "color: #94A3B8; font-size: 9pt; font-weight: 500; "
+            "border: none; background: transparent;"
+        )
+        ub_metin.addWidget(lbl_b)
+        ub_metin.addWidget(lbl_a)
+        ub_lay.addLayout(ub_metin, 1)
         ana.addWidget(ust_bant)
+
+        govde_kap = QWidget()
+        govde_lay = QVBoxLayout(govde_kap)
+        govde_lay.setContentsMargins(20, 18, 20, 20)
+        govde_lay.setSpacing(0)
 
         kart = QFrame()
         kart.setObjectName("PortalKart")
         lay = QVBoxLayout(kart)
-        lay.setContentsMargins(26, 20, 26, 22)
+        lay.setContentsMargins(22, 20, 22, 20)
         lay.setSpacing(12)
 
-        # 1) Öğrenci / Akademisyen Giriş Türü Seçim Butonları
-        tur_lay = QHBoxLayout()
-        tur_lay.setSpacing(8)
-        self.btn_tur_ogr = QPushButton("🎓  Öğrenci Girişi")
-        self.btn_tur_ogr.setMinimumHeight(38)
+        # 1) Öğrenci / Akademisyen Giriş Türü Seçim Sekmesi (Segmented Control)
+        tur_cerceve = QFrame()
+        tur_cerceve.setObjectName("GirisTurSecici")
+        tur_cerceve.setStyleSheet(
+            "QFrame#GirisTurSecici { background-color: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 8px; }"
+        )
+        tur_lay = QHBoxLayout(tur_cerceve)
+        tur_lay.setContentsMargins(4, 4, 4, 4)
+        tur_lay.setSpacing(6)
+        self.btn_tur_ogr = QPushButton("Öğrenci Girişi")
+        self.btn_tur_ogr.setMinimumHeight(34)
         self.btn_tur_ogr.setCursor(Qt.PointingHandCursor)
         self.btn_tur_ogr.clicked.connect(lambda: self._tur_sec("ogrenci"))
 
-        self.btn_tur_aka = QPushButton("👨‍🏫  Akademisyen / Personel Girişi")
-        self.btn_tur_aka.setMinimumHeight(38)
+        self.btn_tur_aka = QPushButton("Akademisyen / Personel Girişi")
+        self.btn_tur_aka.setMinimumHeight(34)
         self.btn_tur_aka.setCursor(Qt.PointingHandCursor)
         self.btn_tur_aka.clicked.connect(lambda: self._tur_sec("akademisyen"))
 
         tur_lay.addWidget(self.btn_tur_ogr, 1)
         tur_lay.addWidget(self.btn_tur_aka, 1)
-        lay.addLayout(tur_lay)
+        lay.addWidget(tur_cerceve)
 
         # 2) Numara Giriş Alanı
-        self.lbl_no_baslik = QLabel("<b>Öğrenci Numarası (5 Haneli):</b>")
+        self.lbl_no_baslik = QLabel("Öğrenci Numarası (5 Haneli — [Yıl][Bölüm][Sıra])")
+        self.lbl_no_baslik.setStyleSheet("color: #334155; font-size: 9.5pt; font-weight: 700; border: none;")
         lay.addWidget(self.lbl_no_baslik)
 
         self.txt_no = QLineEdit()
@@ -97,9 +132,11 @@ class GirisPenceresi(QDialog):
         lay.addWidget(self.txt_no)
 
         # 3) Şifre Giriş Alanı
-        lay.addWidget(QLabel("<b>Şifre:</b>"))
+        lbl_sifre_baslik = QLabel("Şifre")
+        lbl_sifre_baslik.setStyleSheet("color: #334155; font-size: 9.5pt; font-weight: 700; border: none;")
+        lay.addWidget(lbl_sifre_baslik)
         sifre_lay = QHBoxLayout()
-        sifre_lay.setSpacing(6)
+        sifre_lay.setSpacing(8)
         self.txt_sifre = QLineEdit()
         self.txt_sifre.setMinimumHeight(36)
         self.txt_sifre.setEchoMode(QLineEdit.Password)
@@ -107,9 +144,10 @@ class GirisPenceresi(QDialog):
         self.txt_sifre.returnPressed.connect(self.kabul)
         sifre_lay.addWidget(self.txt_sifre, 1)
 
-        self.btn_goz = QPushButton("👁")
+        self.btn_goz = QPushButton("Göster")
         self.btn_goz.setObjectName("IkincilBtn")
-        self.btn_goz.setFixedSize(38, 36)
+        self.btn_goz.setFixedSize(64, 36)
+        self.btn_goz.setCursor(Qt.PointingHandCursor)
         self.btn_goz.setToolTip("Şifreyi Göster / Gizle")
         self.btn_goz.clicked.connect(self._sifre_gorunurluk_degistir)
         sifre_lay.addWidget(self.btn_goz)
@@ -120,22 +158,31 @@ class GirisPenceresi(QDialog):
         rol_v = QVBoxLayout(self.rol_kap)
         rol_v.setContentsMargins(0, 0, 0, 0)
         rol_v.setSpacing(4)
-        rol_v.addWidget(QLabel("<b>Oturum Rolü:</b>"))
+        lbl_rol_b = QLabel("Oturum Rolü")
+        lbl_rol_b.setStyleSheet("color: #334155; font-size: 9.5pt; font-weight: 700; border: none;")
+        rol_v.addWidget(lbl_rol_b)
         self.cmb_rol = QComboBox()
         self.cmb_rol.setMinimumHeight(34)
         rol_v.addWidget(self.cmb_rol)
         lay.addWidget(self.rol_kap)
 
         # 5) Sunum kolaylığı için hızlı hesap rehberi (Seçilince numarayı ve 123456'yı doldurur)
-        rehber_lay = QHBoxLayout()
-        lbl_rehber = QLabel("📋 Hızlı Hesap Seç:")
-        lbl_rehber.setStyleSheet("color: #475569; font-size: 9pt; font-weight: 600;")
+        rehber_kutu = QFrame()
+        rehber_kutu.setObjectName("GirisDemoKutu")
+        rehber_kutu.setStyleSheet(
+            "QFrame#GirisDemoKutu { background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; }"
+        )
+        rehber_lay = QHBoxLayout(rehber_kutu)
+        rehber_lay.setContentsMargins(10, 8, 10, 8)
+        rehber_lay.setSpacing(8)
+        lbl_rehber = QLabel("Hızlı Hesap:")
+        lbl_rehber.setStyleSheet("color: #475569; font-size: 9pt; font-weight: 700; border: none; background: transparent;")
         rehber_lay.addWidget(lbl_rehber)
         self.cmb_hizli = QComboBox()
-        self.cmb_hizli.setMinimumHeight(30)
+        self.cmb_hizli.setMinimumHeight(32)
         self.cmb_hizli.currentIndexChanged.connect(self._hizli_hesap_secildi)
         rehber_lay.addWidget(self.cmb_hizli, 1)
-        lay.addLayout(rehber_lay)
+        lay.addWidget(rehber_kutu)
 
         self.lbl_hata = QLabel("")
         self.lbl_hata.setStyleSheet(
@@ -153,36 +200,39 @@ class GirisPenceresi(QDialog):
         btn_giris.clicked.connect(self.kabul)
         lay.addWidget(btn_giris)
 
-        ana.addWidget(kart, 1)
+        govde_lay.addWidget(kart, 1)
+        ana.addWidget(govde_kap, 1)
         self._tur_sec("ogrenci")
 
     def _sifre_gorunurluk_degistir(self):
         if self.txt_sifre.echoMode() == QLineEdit.Password:
             self.txt_sifre.setEchoMode(QLineEdit.Normal)
+            self.btn_goz.setText("Gizle")
         else:
             self.txt_sifre.setEchoMode(QLineEdit.Password)
+            self.btn_goz.setText("Göster")
 
     def _tur_sec(self, tur: str):
         self.giris_turu = tur
         self.lbl_hata.setVisible(False)
         secili_stil = (
             "background-color: #2563EB; color: #FFFFFF; font-weight: 700; "
-            "border: 2px solid #1D4ED8; border-radius: 6px;"
+            "border: none; border-radius: 6px; font-size: 9.5pt;"
         )
         pasif_stil = (
-            "background-color: #F1F5F9; color: #475569; font-weight: 600; "
-            "border: 1px solid #CBD5E1; border-radius: 6px;"
+            "background-color: transparent; color: #475569; font-weight: 600; "
+            "border: none; border-radius: 6px; font-size: 9.5pt;"
         )
         if tur == "ogrenci":
             self.btn_tur_ogr.setStyleSheet(secili_stil)
             self.btn_tur_aka.setStyleSheet(pasif_stil)
-            self.lbl_no_baslik.setText("<b>Öğrenci Numarası (5 Haneli — [Yıl][Bölüm][Sıra]):</b>")
+            self.lbl_no_baslik.setText("Öğrenci Numarası (5 Haneli — [Yıl][Bölüm][Sıra])")
             self.txt_no.setPlaceholderText("Örn: 23101, 24101, 25102")
             self.rol_kap.setVisible(False)
         else:
             self.btn_tur_aka.setStyleSheet(secili_stil)
             self.btn_tur_ogr.setStyleSheet(pasif_stil)
-            self.lbl_no_baslik.setText("<b>Akademisyen / Personel Numarası (5 Haneli):</b>")
+            self.lbl_no_baslik.setText("Akademisyen / Personel Numarası (5 Haneli)")
             self.txt_no.setPlaceholderText("Örn: 10101 (Danışman/Hoca), 10001 (Sekreter), 10000 (Yönetici)")
             self.rol_kap.setVisible(True)
 

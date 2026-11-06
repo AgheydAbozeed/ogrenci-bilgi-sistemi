@@ -441,7 +441,10 @@ QLineEdit, QComboBox, QSpinBox {{
     color: {p['metin']};
     border: 1px solid {p['kenarlik']};
     border-radius: {OLCULER['dugme_yaricap']}px;
-    padding: 4px 8px;
+    padding: 5px 10px;
+}}
+QLineEdit:focus, QSpinBox:focus {{
+    border: 1.5px solid {p['vurgu']};
 }}
 QTableWidget {{
     background-color: {p['kart_zemin']};

@@ -85,6 +85,31 @@ class TestAiSqlGuvenlik(unittest.TestCase):
         self.assertEqual(metrik["tahmin_sayisi"], 2)
         self.assertEqual(sum(metrik["histogram_sayilari"]), 2)
 
+    def test_ne_degisirse_simulasyon_monotonlugu(self):
+        taban = lojistik_risk_hesapla(
+            gno=1.90,
+            katilim_yuzde=62.0,
+            odev_ort_puan=50.0,
+            basarisiz_ders_sayisi=1,
+            aktif_donem_akts=30,
+        )
+        iyilesmis = lojistik_risk_hesapla(
+            gno=1.90,
+            katilim_yuzde=92.0,
+            odev_ort_puan=85.0,
+            basarisiz_ders_sayisi=1,
+            aktif_donem_akts=30,
+        )
+        kotulesmis = lojistik_risk_hesapla(
+            gno=1.90,
+            katilim_yuzde=40.0,
+            odev_ort_puan=30.0,
+            basarisiz_ders_sayisi=1,
+            aktif_donem_akts=30,
+        )
+        self.assertLess(iyilesmis.skor, taban.skor)
+        self.assertGreater(kotulesmis.skor, taban.skor)
+
 
 if __name__ == "__main__":
     unittest.main()

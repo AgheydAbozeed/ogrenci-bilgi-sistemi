@@ -15,15 +15,18 @@ from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QSizePolicy,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
 
 from app.ai.kimlik import AIDemoEtiket, AIRozet
-from app.ai.risk_motor import RiskNedenKatkisi, RiskTahminSonucu
+from app.ai.risk_motor import RiskNedenKatkisi, RiskTahminSonucu, lojistik_risk_hesapla
 from app.stil import aktif_palet
 
 
@@ -215,13 +218,80 @@ class RiskRadariKarti(QFrame):
         self.lbl_not.setStyleSheet(f"color: {aktif_palet()['ikincil_metin']}; font-size: 8.5pt;")
         ana.addWidget(self.lbl_not)
 
-        # Etkileşim (kaydırıcılar) için ayrılan alt konteyner
-        self.alt_ek_lay = QVBoxLayout()
-        self.alt_ek_lay.setContentsMargins(0, 0, 0, 0)
-        ana.addLayout(self.alt_ek_lay)
+        # Etkileşim ("Ne değişirse?" canlı kaydırıcıları) kutusu
+        self._taban_veri: dict = {}
+        self._taban_yuzde: int = 0
+        self._kaydirici_kilit: bool = False
 
-    def sonuc_goster(self, ad_soyad: str, sonuc: RiskTahminSonucu):
-        self.lbl_baslik.setText(f"<b>✦  {ad_soyad} — Akademik Risk Radarı</b>")
+        whatif_kutu = QFrame(self)
+        whatif_kutu.setObjectName("WhatIfKutu")
+        p = aktif_palet()
+        whatif_kutu.setStyleSheet(
+            f"QFrame#WhatIfKutu {{ background-color: {p['zebra_zemin']}; "
+            f"border: 1px solid {p['ai_kenar']}; border-radius: 8px; }}"
+        )
+        w_lay = QVBoxLayout(whatif_kutu)
+        w_lay.setContentsMargins(12, 8, 12, 8)
+        w_lay.setSpacing(6)
+
+        w_ust = QHBoxLayout()
+        lbl_w_baslik = QLabel("<b>✦  Ne Değişirse? (Canlı Risk Simülasyonu)</b>")
+        lbl_w_baslik.setStyleSheet(f"color: {p['ai_rozet_metin']}; font-size: 9pt; border: none;")
+        w_ust.addWidget(lbl_w_baslik)
+        w_ust.addStretch()
+
+        self.lbl_fark = QLabel("Mevcut gerçek değerler")
+        self.lbl_fark.setStyleSheet(f"color: {p['ikincil_metin']}; font-size: 8.5pt; font-weight: 600; border: none;")
+        w_ust.addWidget(self.lbl_fark)
+
+        self.btn_sifirla = QPushButton("↺ Gerçek Değerlere Dön")
+        self.btn_sifirla.setObjectName("IkincilBtn")
+        self.btn_sifirla.setCursor(Qt.PointingHandCursor)
+        self.btn_sifirla.setFixedHeight(24)
+        self.btn_sifirla.setStyleSheet(
+            f"padding: 2px 8px; font-size: 8pt; font-weight: 700; color: {p['ai_rozet_metin']};"
+        )
+        self.btn_sifirla.clicked.connect(self.simulasyonu_sifirla)
+        w_ust.addWidget(self.btn_sifirla)
+        w_lay.addLayout(w_ust)
+
+        izgara = QGridLayout()
+        izgara.setContentsMargins(0, 0, 0, 0)
+        izgara.setHorizontalSpacing(10)
+        izgara.setVerticalSpacing(4)
+
+        lbl_k = QLabel("Katılım Oranı (%):")
+        lbl_k.setStyleSheet("font-size: 8.5pt; font-weight: 600; border: none;")
+        self.sld_katilim = QSlider(Qt.Horizontal)
+        self.sld_katilim.setRange(0, 100)
+        self.sld_katilim.setValue(85)
+        self.sld_katilim.valueChanged.connect(self._simulasyon_hesapla)
+        self.lbl_katilim_deger = QLabel("%85")
+        self.lbl_katilim_deger.setFixedWidth(56)
+        self.lbl_katilim_deger.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_katilim_deger.setStyleSheet("font-size: 8.5pt; font-weight: 700; border: none;")
+
+        lbl_o = QLabel("Ödev Puanı (0-100):")
+        lbl_o.setStyleSheet("font-size: 8.5pt; font-weight: 600; border: none;")
+        self.sld_odev = QSlider(Qt.Horizontal)
+        self.sld_odev.setRange(0, 100)
+        self.sld_odev.setValue(70)
+        self.sld_odev.valueChanged.connect(self._simulasyon_hesapla)
+        self.lbl_odev_deger = QLabel("70 / 100")
+        self.lbl_odev_deger.setFixedWidth(56)
+        self.lbl_odev_deger.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_odev_deger.setStyleSheet("font-size: 8.5pt; font-weight: 700; border: none;")
+
+        izgara.addWidget(lbl_k, 0, 0)
+        izgara.addWidget(self.sld_katilim, 0, 1)
+        izgara.addWidget(self.lbl_katilim_deger, 0, 2)
+        izgara.addWidget(lbl_o, 1, 0)
+        izgara.addWidget(self.sld_odev, 1, 1)
+        izgara.addWidget(self.lbl_odev_deger, 1, 2)
+        w_lay.addLayout(izgara)
+        ana.addWidget(whatif_kutu)
+
+    def _cizimi_guncelle(self, sonuc: RiskTahminSonucu):
         self.rozet.guncelle(model=sonuc.model_surum, guven=sonuc.guven)
         self.gosterge.deger_ayarla(sonuc.skor, sonuc.seviye)
         for idx, cubuk in enumerate(self.cubuklar):
@@ -230,3 +300,91 @@ class RiskRadariKarti(QFrame):
                 cubuk.setVisible(True)
             else:
                 cubuk.setVisible(False)
+
+    def sonuc_goster(self, ad_soyad: str, sonuc: RiskTahminSonucu, ogrenci_verisi: dict | None = None):
+        self.lbl_baslik.setText(f"<b>✦  {ad_soyad} — Akademik Risk Radarı</b>")
+        self._taban_yuzde = sonuc.yuzde
+        veri = ogrenci_verisi or {}
+        self._taban_veri = {
+            "gno": float(veri.get("gno") if veri.get("gno") is not None else sonuc.ozellikler.get("gno", 2.50)),
+            "katilim_yuzde": float(
+                veri.get("katilim_yuzde")
+                if veri.get("katilim_yuzde") is not None
+                else sonuc.ozellikler.get("katilim_yuzde", 85.0)
+            ),
+            "odev_ort_puan": float(
+                veri.get("odev_ort_puan")
+                if veri.get("odev_ort_puan") is not None
+                else sonuc.ozellikler.get("odev_ort_puan", 70.0)
+            ),
+            "basarisiz_ders_sayisi": int(
+                veri.get("basarisiz_ders_sayisi")
+                if veri.get("basarisiz_ders_sayisi") is not None
+                else sonuc.ozellikler.get("basarisiz_ders_sayisi", 0)
+            ),
+            "aktif_donem_akts": int(
+                veri.get("aktif_donem_akts")
+                if veri.get("aktif_donem_akts") is not None
+                else sonuc.ozellikler.get("aktif_donem_akts", 24)
+            ),
+            "ogrenci_id": veri.get("ogrenci_id"),
+            "min_gno": float(veri.get("min_gno") or sonuc.ozellikler.get("min_gno", 2.00)),
+            "devamsizlik_siniri": float(
+                veri.get("devamsizlik_siniri") or sonuc.ozellikler.get("devamsizlik_siniri", 30.0)
+            ),
+        }
+        self._kaydirici_kilit = True
+        kat = int(round(self._taban_veri["katilim_yuzde"]))
+        odev = int(round(self._taban_veri["odev_ort_puan"]))
+        self.sld_katilim.setValue(kat)
+        self.sld_odev.setValue(odev)
+        self.lbl_katilim_deger.setText(f"%{kat}")
+        self.lbl_odev_deger.setText(f"{odev} / 100")
+        self._kaydirici_kilit = False
+
+        p = aktif_palet()
+        self.lbl_fark.setText(f"Başlangıç riski: %{self._taban_yuzde}")
+        self.lbl_fark.setStyleSheet(f"color: {p['ikincil_metin']}; font-size: 8.5pt; font-weight: 600; border: none;")
+        self._cizimi_guncelle(sonuc)
+
+    def simulasyonu_sifirla(self):
+        if not self._taban_veri:
+            return
+        self.sld_katilim.setValue(int(round(self._taban_veri["katilim_yuzde"])))
+        self.sld_odev.setValue(int(round(self._taban_veri["odev_ort_puan"])))
+
+    def _simulasyon_hesapla(self):
+        if self._kaydirici_kilit or not self._taban_veri:
+            return
+        kat = float(self.sld_katilim.value())
+        odev = float(self.sld_odev.value())
+        self.lbl_katilim_deger.setText(f"%{int(kat)}")
+        self.lbl_odev_deger.setText(f"{int(odev)} / 100")
+
+        yeni_sonuc = lojistik_risk_hesapla(
+            gno=self._taban_veri["gno"],
+            katilim_yuzde=kat,
+            odev_ort_puan=odev,
+            basarisiz_ders_sayisi=self._taban_veri["basarisiz_ders_sayisi"],
+            aktif_donem_akts=self._taban_veri["aktif_donem_akts"],
+            ogrenci_id=self._taban_veri["ogrenci_id"],
+            min_gno=self._taban_veri["min_gno"],
+            devamsizlik_siniri=self._taban_veri["devamsizlik_siniri"],
+        )
+        self._cizimi_guncelle(yeni_sonuc)
+
+        fark = yeni_sonuc.yuzde - self._taban_yuzde
+        p = aktif_palet()
+        if fark == 0:
+            self.lbl_fark.setText(f"Başlangıç: %{self._taban_yuzde} (değişim yok)")
+            self.lbl_fark.setStyleSheet(
+                f"color: {p['ikincil_metin']}; font-size: 8.5pt; font-weight: 600; border: none;"
+            )
+        elif fark < 0:
+            renk = "#4ADE80" if p["tema"] == "koyu" else "#15803D"
+            self.lbl_fark.setText(f"Başlangıç: %{self._taban_yuzde} → %{yeni_sonuc.yuzde} ({fark} pt risk azalışı)")
+            self.lbl_fark.setStyleSheet(f"color: {renk}; font-size: 8.5pt; font-weight: 700; border: none;")
+        else:
+            renk = "#F87171" if p["tema"] == "koyu" else "#B91C1C"
+            self.lbl_fark.setText(f"Başlangıç: %{self._taban_yuzde} → %{yeni_sonuc.yuzde} (+{fark} pt risk artışı)")
+            self.lbl_fark.setStyleSheet(f"color: {renk}; font-size: 8.5pt; font-weight: 700; border: none;")
