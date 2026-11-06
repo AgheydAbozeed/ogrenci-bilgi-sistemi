@@ -10,6 +10,8 @@ from app.db import Veritabani, hata_coz, hata_goster, HATA_SABLONLARI
 from app.stil import (
     OLCULER, DURUM_ROZETLERI, akts_cubuk_kurali, rozet_formatla, aktif_palet
 )
+from app.ai.kimlik import AIRozet, AIDemoEtiket
+from app.ai.ders_oneri import ders_basari_tahmini_hesapla
 
 GUN_KISA_HARITA = {
     "pzt": (0, "Pazartesi"),
@@ -475,17 +477,30 @@ class OgrenciDersSecimi(QWidget):
         arama_lay = QHBoxLayout()
         lbl_acik = QLabel("<b>Açık Şubeler (Üzerine gelerek programda önizleyin)</b>")
         arama_lay.addWidget(lbl_acik)
+        self.ai_sube_rozet = AIRozet(guven=89)
+        arama_lay.addWidget(self.ai_sube_rozet)
+        arama_lay.addWidget(AIDemoEtiket())
         arama_lay.addStretch()
         self.txt_ara = QLineEdit()
         self.txt_ara.setPlaceholderText("🔍 Ders kodu, adı veya öğretim üyesi ara...")
-        self.txt_ara.setMinimumWidth(240)
+        self.txt_ara.setMinimumWidth(220)
         self.txt_ara.textChanged.connect(self.sube_filtrele)
         arama_lay.addWidget(self.txt_ara)
         sol_lay.addLayout(arama_lay)
 
-        self.tbl_subeler = QTableWidget(0, 8)
+        self.tbl_subeler = QTableWidget(0, 9)
         self.tbl_subeler.setHorizontalHeaderLabels(
-            ["Kod", "Ders Adı", "AKTS", "Şb", "Öğretim Üyesi", "Saatler", "Durum Rozeti & Neden", "İşlem"]
+            [
+                "Kod",
+                "Ders Adı",
+                "AKTS",
+                "Şb",
+                "Öğretim Üyesi",
+                "Saatler",
+                "✦ Tahmini Başarı %",
+                "Durum Rozeti & Neden",
+                "İşlem",
+            ]
         )
         self.tbl_subeler.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.tbl_subeler.horizontalHeader().setStretchLastSection(True)
@@ -629,6 +644,17 @@ class OgrenciDersSecimi(QWidget):
             if 0 <= gun < 5 and 0 <= saat < 8:
                 self.dolu_slotlar[(gun, saat)] = (p["ders_kod"], p["durum"])
 
+        # Öğrencinin GNO, sınıf ve geçmişte başarısız olduğu dersleri oku (✦ AI Başarı % hesabı için)
+        ana_ozet = self.db.tek_satir("SELECT * FROM v_ana_sayfa") or {}
+        ogr_gno = float(ana_ozet["gno"]) if ana_ozet.get("gno") is not None else None
+        ogr_sinif = int(ana_ozet.get("sinif") or 1)
+        ogr_min_gno = float(ana_ozet.get("min_gno") or 2.00)
+        kalinan_satirlar = self.db.sorgula(
+            "SELECT DISTINCT ders_kod FROM v_transkript WHERE gecer_mi = false"
+        )
+        kalinan_kodlar = {str(x["ders_kod"]) for x in kalinan_satirlar if x.get("ders_kod")}
+        pal = aktif_palet()
+
         # Açık şubeleri oku ve tabloya yerleştir
         self.subeler_veri = self.db.sorgula(
             "SELECT * FROM v_acik_subeler WHERE donem_id = %s ORDER BY ders_kod, sube_no", (aktif_donem,)
@@ -648,6 +674,31 @@ class OgrenciDersSecimi(QWidget):
             self.tbl_subeler.setItem(r, 4, QTableWidgetItem(s["hoca"]))
             self.tbl_subeler.setItem(r, 5, QTableWidgetItem(s["saatler"]))
 
+            # ✦ Tahmini Başarı % sütunu (AI önerisi, karar vermez)
+            tahmin = ders_basari_tahmini_hesapla(
+                ders_kod=str(s["ders_kod"]),
+                ders_ad=str(s["ders_ad"]),
+                akts=int(s.get("akts") or 6),
+                ogrenci_gno=ogr_gno,
+                ogrenci_sinif=ogr_sinif,
+                daha_once_kaldi_mi=(str(s["ders_kod"]) in kalinan_kodlar),
+                min_gno=ogr_min_gno,
+            )
+            s["tahmini_basari_yuzde"] = tahmin.basari_yuzde
+            s["tahmini_basari_gerekce"] = tahmin.gerekce
+            it_ai = QTableWidgetItem(f"✦ %{tahmin.basari_yuzde} ({tahmin.seviye})")
+            it_ai.setTextAlignment(Qt.AlignCenter)
+            it_ai.setBackground(QBrush(QColor(pal["ai_rozet_zemin"])))
+            it_ai.setForeground(QBrush(QColor(pal["ai_rozet_metin"])))
+            f_ai = QFont()
+            f_ai.setBold(True)
+            it_ai.setFont(f_ai)
+            it_ai.setToolTip(
+                f"{tahmin.gerekce}\n"
+                f"✦ AI · model v1 · güven %{tahmin.guven} · demo verisi (Yalnızca öneri, kısıtları DB doğrular)"
+            )
+            self.tbl_subeler.setItem(r, 6, it_ai)
+
             durum = s["durum"]
             neden_metin = s.get("neden")
             if durum == "onkosul_eksik" and neden_metin:
@@ -662,14 +713,14 @@ class OgrenciDersSecimi(QWidget):
             f_bold = QFont()
             f_bold.setBold(True)
             item_d.setFont(f_bold)
-            self.tbl_subeler.setItem(r, 6, item_d)
+            self.tbl_subeler.setItem(r, 7, item_d)
 
             btn = QPushButton("➕ Sepete Ekle" if durum == "alinabilir" else "—")
             btn.setObjectName("BirincilBtn" if durum == "alinabilir" else "IkincilBtn")
             btn.setEnabled(durum == "alinabilir")
             sube_id = s["sube_id"]
             btn.clicked.connect(lambda _, sid=sube_id, sv=s: self.sepete_ekle(sid, sv))
-            self.tbl_subeler.setCellWidget(r, 7, btn)
+            self.tbl_subeler.setCellWidget(r, 8, btn)
 
         self.tbl_subeler.resizeColumnsToContents()
 
@@ -884,7 +935,7 @@ class OgrenciDersSecimi(QWidget):
         for r in range(self.tbl_subeler.rowCount()):
             eslesti = any(
                 q in (self.tbl_subeler.item(r, c).text().lower() if self.tbl_subeler.item(r, c) else "")
-                for c in (0, 1, 4, 6)
+                for c in (0, 1, 4, 6, 7)
             )
             self.tbl_subeler.setRowHidden(r, not eslesti)
 

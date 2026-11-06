@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from app.ai.ders_oneri import (
+    DersBasariTahmini,
+    ders_basari_tahmini_hesapla,
+    ders_seviye_ve_zorluk,
+)
 from app.ai.risk_motor import (
     RISK_MODEL_SURUM,
     RiskNedenKatkisi,
@@ -63,6 +68,9 @@ __all__ = [
     "DaireselRiskGostergesi",
     "NedenKatkiCubugu",
     "RiskRadariKarti",
+    "DersBasariTahmini",
+    "ders_basari_tahmini_hesapla",
+    "ders_seviye_ve_zorluk",
 ]
 
 _KIMLIK_SEMBOLLERI = {

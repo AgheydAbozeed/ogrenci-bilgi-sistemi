@@ -3,6 +3,7 @@ tests/007_ai_sql_guvenlik_testi.py — AI NL→SQL beyaz liste ve salt-okunur ko
 """
 import unittest
 
+from app.ai.ders_oneri import ders_basari_tahmini_hesapla
 from app.ai.risk_motor import lojistik_risk_hesapla, model_degerlendirme_metrikleri
 from app.ai.sablon_motor import NIYET_SABLONLARI, niyet_siniflandir
 from app.ai.sql_koruma import SemaKatalogu, SqlGuvenlikHatasi, sql_dogrula
@@ -109,6 +110,27 @@ class TestAiSqlGuvenlik(unittest.TestCase):
         )
         self.assertLess(iyilesmis.skor, taban.skor)
         self.assertGreater(kotulesmis.skor, taban.skor)
+
+    def test_ders_basari_tahmini_aralik_ve_siralama(self):
+        secmeli_yuksek_gno = ders_basari_tahmini_hesapla(
+            ders_kod="SEC105",
+            ders_ad="Doğal Dil İşleme",
+            akts=5,
+            ogrenci_gno=3.40,
+            ogrenci_sinif=2,
+            daha_once_kaldi_mi=False,
+        )
+        zor_tekrar_dusuk_gno = ders_basari_tahmini_hesapla(
+            ders_kod="MAT201",
+            ders_ad="Diferansiyel Denklemler",
+            akts=6,
+            ogrenci_gno=1.65,
+            ogrenci_sinif=1,
+            daha_once_kaldi_mi=True,
+        )
+        self.assertTrue(35 <= secmeli_yuksek_gno.basari_yuzde <= 98)
+        self.assertTrue(35 <= zor_tekrar_dusuk_gno.basari_yuzde <= 98)
+        self.assertGreater(secmeli_yuksek_gno.basari_yuzde, zor_tekrar_dusuk_gno.basari_yuzde)
 
 
 if __name__ == "__main__":
