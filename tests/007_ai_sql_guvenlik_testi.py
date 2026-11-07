@@ -156,6 +156,51 @@ class TestAiSqlGuvenlik(unittest.TestCase):
         self.assertGreaterEqual(planlar[0].toplam_akts, planlar[2].toplam_akts)
         self.assertGreaterEqual(planlar[2].ortalama_basari_yuzde, planlar[0].ortalama_basari_yuzde)
 
+    def test_tasarim_tokenlari_ve_wcag_kontrast(self):
+        from app.stil import BOSLUK_OLCEGI, KOSE_OLCEGI, OLCULER, YAZI_OLCEGI, tum_palet_kontrast_raporu
+
+        self.assertNotIn("Inter", OLCULER["yazi_tipi"])
+        self.assertEqual(BOSLUK_OLCEGI["xs"], 4)
+        self.assertEqual(BOSLUK_OLCEGI["2xl"], 32)
+        self.assertEqual(KOSE_OLCEGI["kart"], 8)
+        self.assertIn("baslik_1", YAZI_OLCEGI)
+
+        rapor = tum_palet_kontrast_raporu()
+        self.assertGreaterEqual(len(rapor), 16)
+        for satir in rapor:
+            self.assertTrue(
+                satir["gecer_mi"],
+                f"{satir['ad']} kontrast eşiği altında: {satir['oran']}:1 ({satir['fg']} / {satir['bg']})",
+            )
+
+    def test_ai_merkezi_metrik_anahtarlari(self):
+        from app.ai.risk_motor import lojistik_risk_hesapla, model_degerlendirme_metrikleri
+
+        ornek = lojistik_risk_hesapla(
+            gno=2.10,
+            katilim_yuzde=72.0,
+            odev_ort_puan=60.0,
+            basarisiz_ders_sayisi=1,
+            aktif_donem_akts=24,
+            ogrenci_id=1,
+        )
+        metrik = model_degerlendirme_metrikleri([ornek])
+        zorunlu_anahtarlar = [
+            "ortalama_guven",
+            "tahmin_sayisi",
+            "dusuk_risk_sayisi",
+            "orta_risk_sayisi",
+            "yuksek_risk_sayisi",
+            "dogruluk",
+            "f1_skoru",
+            "brier_skoru",
+            "histogram_sayilari",
+            "ortalama_risk",
+            "adalet_ozeti",
+        ]
+        for k in zorunlu_anahtarlar:
+            self.assertIn(k, metrik)
+
 
 if __name__ == "__main__":
     unittest.main()

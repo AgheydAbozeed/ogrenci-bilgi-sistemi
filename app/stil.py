@@ -1,4 +1,7 @@
-from PySide6.QtCore import QSettings
+try:
+    from PySide6.QtCore import QSettings
+except ImportError:  # pragma: no cover
+    QSettings = None
 
 # =====================================================================
 # TASARIM SİSTEMİ — RENK PALETİ, WCAG 2.x KONTRAST VE ÖLÇÜLER
@@ -70,20 +73,56 @@ KOYU_PALET = {
     "ai_kenar": "#6D28D9",
 }
 
+# Boşluk, Köşe Yarıçapı ve Tipografi Ölçekleri
+BOSLUK_OLCEGI = {
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+}
+
+KOSE_OLCEGI = {
+    "rozet": 4,
+    "dugme": 6,
+    "kart": 8,
+    "modal": 12,
+}
+
+YAZI_OLCEGI = {
+    "baslik_1": {"boyut_px": 24, "boyut_pt": 18, "agirlik": 600, "satir_yuksekligi": 1.3},
+    "baslik_2": {"boyut_px": 18, "boyut_pt": 14, "agirlik": 600, "satir_yuksekligi": 1.35},
+    "baslik_3": {"boyut_px": 15, "boyut_pt": 12, "agirlik": 600, "satir_yuksekligi": 1.4},
+    "govde": {"boyut_px": 13, "boyut_pt": 10, "agirlik": 400, "satir_yuksekligi": 1.5},
+    "yardimci": {"boyut_px": 12, "boyut_pt": 9, "agirlik": 400, "satir_yuksekligi": 1.4},
+    "kod": {
+        "boyut_px": 12,
+        "boyut_pt": 9,
+        "agirlik": 500,
+        "ailesi": '"JetBrains Mono", "SF Mono", Menlo, Consolas, monospace',
+    },
+}
+
 # Ölçü ve Yerleşim Sabitleri
 OLCULER = {
+    "yazi_yardimci_pt": 9,
     "yazi_govde_pt": 10,
     "yazi_baslik3_pt": 12,
     "yazi_baslik2_pt": 14,
     "yazi_baslik1_pt": 18,
-    "yazi_tipi": '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
+    "yazi_tipi": '-apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Roboto, Arial, sans-serif',
+    "kod_yazi_tipi": '"JetBrains Mono", "SF Mono", Menlo, Consolas, monospace',
     "bosluk_1": 4,
     "bosluk_2": 8,
     "bosluk_3": 12,
     "bosluk_4": 16,
     "bosluk_5": 24,
+    "bosluk_6": 32,
+    "rozet_yaricap": 4,
     "kart_yaricap": 8,
     "dugme_yaricap": 6,
+    "modal_yaricap": 12,
     "menu_genislik": 220,
     "tablo_satir_yukseklik": 36,
     "asgari_pencere_genislik": 1100,
@@ -203,6 +242,35 @@ def kontrast_orani(on_plan_hex: str, zemin_hex: str) -> float:
     return (parlak + 0.05) / (koyu + 0.05)
 
 
+def tum_palet_kontrast_raporu() -> list[dict]:
+    """Açık ve koyu temadaki tüm ana metin/zemin çiftlerinin WCAG AA (4.5:1) uyumunu denetler."""
+    ciftler = [
+        ("Açık: Ana Metin / Zemin", ACIK_PALET["metin"], ACIK_PALET["zemin"]),
+        ("Açık: Ana Metin / Kart", ACIK_PALET["metin"], ACIK_PALET["kart_zemin"]),
+        ("Açık: İkincil Metin / Kart", ACIK_PALET["ikincil_metin"], ACIK_PALET["kart_zemin"]),
+        ("Açık: Vurgu Düğme", ACIK_PALET["vurgu_metin"], ACIK_PALET["vurgu"]),
+        ("Açık: Başarı Rozet", ACIK_PALET["basari_metin"], ACIK_PALET["basari_zemin"]),
+        ("Açık: Uyarı Rozet", ACIK_PALET["uyari_metin"], ACIK_PALET["uyari_zemin"]),
+        ("Açık: Hata Rozet", ACIK_PALET["hata_metin"], ACIK_PALET["hata_zemin"]),
+        ("Açık: AI Düğme", ACIK_PALET["ai_dugme_metin"], ACIK_PALET["ai_dugme"]),
+        ("Açık: AI Rozet", ACIK_PALET["ai_rozet_metin"], ACIK_PALET["ai_rozet_zemin"]),
+        ("Koyu: Ana Metin / Zemin", KOYU_PALET["metin"], KOYU_PALET["zemin"]),
+        ("Koyu: Ana Metin / Kart", KOYU_PALET["metin"], KOYU_PALET["kart_zemin"]),
+        ("Koyu: İkincil Metin / Kart", KOYU_PALET["ikincil_metin"], KOYU_PALET["kart_zemin"]),
+        ("Koyu: Vurgu Düğme", KOYU_PALET["vurgu_metin"], KOYU_PALET["vurgu"]),
+        ("Koyu: Başarı Metin", KOYU_PALET["basari_metin"], KOYU_PALET["basari_zemin"]),
+        ("Koyu: Uyarı Metin", KOYU_PALET["uyari_metin"], KOYU_PALET["uyari_zemin"]),
+        ("Koyu: Hata Metin", KOYU_PALET["hata_metin"], KOYU_PALET["hata_zemin"]),
+        ("Koyu: AI Düğme", KOYU_PALET["ai_dugme_metin"], KOYU_PALET["ai_dugme"]),
+        ("Koyu: AI Rozet", KOYU_PALET["ai_rozet_metin"], KOYU_PALET["ai_rozet_zemin"]),
+    ]
+    sonuclar = []
+    for ad, fg, bg in ciftler:
+        oran = round(kontrast_orani(fg, bg), 2)
+        sonuclar.append({"ad": ad, "fg": fg, "bg": bg, "oran": oran, "gecer_mi": oran >= 4.5})
+    return sonuclar
+
+
 def akts_cubuk_kurali(toplam_akts: int, sinir_akts: int) -> tuple[str, str, str]:
     """
     AKTS çubuğu renk kuralı hesaplayıcısı:
@@ -245,16 +313,29 @@ def rozet_formatla(durum_kodu: str, neden: str | None = None) -> tuple[str, str,
     return bg, fg, etiket
 
 
-def tema_ayarlari() -> QSettings:
+_BELLEK_TEMA = "acik"
+
+
+def tema_ayarlari():
+    if QSettings is None:
+        return None
     return QSettings("OBS", "OgrenciBilgiSistemi")
 
 
 def aktif_tema_adi() -> str:
-    return str(tema_ayarlari().value("tema", "acik"))
+    ayar = tema_ayarlari()
+    if ayar is None:
+        return _BELLEK_TEMA
+    return str(ayar.value("tema", "acik"))
 
 
 def tema_kaydet(tema: str):
-    tema_ayarlari().setValue("tema", tema if tema in ("acik", "koyu") else "acik")
+    global _BELLEK_TEMA
+    secim = tema if tema in ("acik", "koyu") else "acik"
+    _BELLEK_TEMA = secim
+    ayar = tema_ayarlari()
+    if ayar is not None:
+        ayar.setValue("tema", secim)
 
 
 def aktif_palet() -> dict:

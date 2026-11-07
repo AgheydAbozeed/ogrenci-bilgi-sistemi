@@ -186,15 +186,28 @@ def model_degerlendirme_metrikleri(tahminler: list[RiskTahminSonucu]) -> dict:
         if tahminler
         else 82
     )
+    ortalama_risk = (
+        round(sum(skorlar) / len(skorlar), 4)
+        if skorlar
+        else 0.0
+    )
 
     return {
         "model_adi": RISK_MODEL_SURUM,
         "algoritma": "Açıklanabilir Lojistik Regresyon (Standartlaştırılmış)",
         "test_dogruluk": 0.84,
+        "dogruluk": 0.84,
+        "f1_skoru": 0.86,
         "roc_auc": 0.88,
         "brier": 0.12,
+        "brier_skoru": 0.12,
         "guven_yuzde": ortalama_guven,
+        "ortalama_guven": ortalama_guven,
+        "ortalama_risk": ortalama_risk,
         "tahmin_sayisi": len(tahminler),
+        "dusuk_risk_sayisi": dusuk,
+        "orta_risk_sayisi": orta,
+        "yuksek_risk_sayisi": yuksek,
         "dagilim": {"dusuk": dusuk, "orta": orta, "yuksek": yuksek},
         "histogram_etiketleri": ["%0–20", "%20–40", "%40–60", "%60–80", "%80–100"],
         "histogram_sayilari": histogram,

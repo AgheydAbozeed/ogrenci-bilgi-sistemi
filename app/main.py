@@ -6,11 +6,12 @@ from PySide6.QtWidgets import (
     QLabel, QComboBox, QPushButton, QWidget, QStackedWidget, QFrame,
     QMessageBox, QDockWidget, QScrollArea, QLineEdit
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QShortcut, QKeySequence
 from app.db import Veritabani
+from app.ikonlar import svg_ikon
 from app.stil import (
-    OLCULER, stil_uret, aktif_tema_adi, tema_kaydet
+    OLCULER, stil_uret, aktif_tema_adi, tema_kaydet, aktif_palet
 )
 from app.ekranlar.ogrenci_ana import OgrenciAnaSayfa, OgrenciDersSecimi
 from app.ekranlar.ogrenci_diger import (
@@ -501,22 +502,22 @@ class AnaPencere(QMainWindow):
         self.btn_tema.setObjectName("UstBarBtn")
         self.btn_tema.clicked.connect(self.tema_degistir)
         u_lay.addWidget(self.btn_tema)
-        self._tema_buton_metni_guncelle()
 
-        btn_demo = QPushButton("🎯  Demo Rehberi")
-        btn_demo.setObjectName("UstBarBtn")
-        btn_demo.clicked.connect(self.demo_rehberi_ac_kapat)
-        u_lay.addWidget(btn_demo)
+        self.btn_demo = QPushButton("  Demo Rehberi")
+        self.btn_demo.setObjectName("UstBarBtn")
+        self.btn_demo.clicked.connect(self.demo_rehberi_ac_kapat)
+        u_lay.addWidget(self.btn_demo)
 
         self.btn_ust_ai = QPushButton("✦  AI Asistan")
         self.btn_ust_ai.setObjectName("AIDugme")
         self.btn_ust_ai.clicked.connect(lambda: self.ai_katmani.ac_kapat())
         u_lay.addWidget(self.btn_ust_ai)
 
-        btn_cikis = QPushButton("⇥  Kullanıcı Değiştir")
-        btn_cikis.setObjectName("IkincilBtn")
-        btn_cikis.clicked.connect(self.kullanici_degistir)
-        u_lay.addWidget(btn_cikis)
+        self.btn_cikis = QPushButton("  Kullanıcı Değiştir")
+        self.btn_cikis.setObjectName("IkincilBtn")
+        self.btn_cikis.clicked.connect(self.kullanici_degistir)
+        u_lay.addWidget(self.btn_cikis)
+        self._tema_buton_metni_guncelle()
 
         sag_govde.addWidget(ust)
 
@@ -575,16 +576,28 @@ class AnaPencere(QMainWindow):
             w.txt_ara.clear()
 
     def _tema_buton_metni_guncelle(self):
+        p = aktif_palet()
+        ikon_renk = p["metin"]
         if aktif_tema_adi() == "koyu":
-            self.btn_tema.setText("☀️  Açık Tema")
+            self.btn_tema.setText("  Açık Tema")
+            self.btn_tema.setIcon(svg_ikon("tema_acik", ikon_renk, 16))
         else:
-            self.btn_tema.setText("🌙  Koyu Tema")
+            self.btn_tema.setText("  Koyu Tema")
+            self.btn_tema.setIcon(svg_ikon("tema_koyu", ikon_renk, 16))
+        self.btn_tema.setIconSize(QSize(16, 16))
+        if hasattr(self, "btn_demo"):
+            self.btn_demo.setIcon(svg_ikon("rehber", ikon_renk, 16))
+            self.btn_demo.setIconSize(QSize(16, 16))
+        if hasattr(self, "btn_cikis"):
+            self.btn_cikis.setIcon(svg_ikon("cikis", ikon_renk, 16))
+            self.btn_cikis.setIconSize(QSize(16, 16))
 
     def tema_degistir(self):
         yeni_tema = "koyu" if aktif_tema_adi() == "acik" else "acik"
         tema_kaydet(yeni_tema)
         QApplication.instance().setStyleSheet(stil_uret(yeni_tema))
         self._tema_buton_metni_guncelle()
+        self._menu_ikonlarini_yenile()
         if hasattr(self, "ai_katmani"):
             self.ai_katmani.tema_yenile()
         self.aktif_ekrani_yenile()
@@ -642,38 +655,40 @@ class AnaPencere(QMainWindow):
 
         if self.db.aktif_rol == "rol_ogrenci":
             sekme_listesi = [
-                ("⚙️   Ana Görünüm (Ctrl+1)", lambda: OgrenciAnaSayfa(self.db, self.sekme_sec)),
-                ("📝   Ders Kayıt İşlemleri (Ctrl+2)", lambda: OgrenciDersSecimi(self.db)),
-                ("A+   Not Bilgileri (Ctrl+3)", lambda: OgrenciNotlarTranskript(self.db)),
-                ("🎓   Mezuniyet & DAG (Ctrl+4)", lambda: OgrenciMezuniyetSimulasyon(self.db)),
-                ("👤   Kişisel & Takvim (Ctrl+5)", lambda: OgrenciKisiselVeTakvim(self.db)),
+                ("ana_sayfa", "  Ana Görünüm (Ctrl+1)", lambda: OgrenciAnaSayfa(self.db, self.sekme_sec)),
+                ("ders_secimi", "  Ders Kayıt İşlemleri (Ctrl+2)", lambda: OgrenciDersSecimi(self.db)),
+                ("notlar", "  Not Bilgileri (Ctrl+3)", lambda: OgrenciNotlarTranskript(self.db)),
+                ("mezuniyet", "  Mezuniyet & DAG (Ctrl+4)", lambda: OgrenciMezuniyetSimulasyon(self.db)),
+                ("takvim", "  Kişisel & Takvim (Ctrl+5)", lambda: OgrenciKisiselVeTakvim(self.db)),
             ]
         elif self.db.aktif_rol == "rol_danisman":
             sekme_listesi = [
-                ("☑️   Onay Kuyruğu (Ctrl+1)", lambda: DanismanOnayKuyrugu(self.db)),
-                ("📊   Danışanlarım (Ctrl+2)", lambda: DanisanPaneli(self.db)),
-                ("✦   AI Merkezi (Ctrl+3)", lambda: AIMerkeziEkrani(self.db)),
+                ("onay", "  Onay Kuyruğu (Ctrl+1)", lambda: DanismanOnayKuyrugu(self.db)),
+                ("danisanlar", "  Danışanlarım (Ctrl+2)", lambda: DanisanPaneli(self.db)),
+                ("ai_merkezi", "  ✦ AI Merkezi (Ctrl+3)", lambda: AIMerkeziEkrani(self.db)),
             ]
         elif self.db.aktif_rol == "rol_ogretim_uyesi":
             sekme_listesi = [
-                ("👨‍🏫   Şubelerim, Not & Yoklama", lambda: OgretimUyesiPaneli(self.db)),
+                ("ogretim_uyesi", "  Şubelerim, Not & Yoklama", lambda: OgretimUyesiPaneli(self.db)),
             ]
         elif self.db.aktif_rol == "rol_sekreter":
             sekme_listesi = [
-                ("🗂️   Sekreterlik İşlemleri", lambda: SekreterPaneli(self.db)),
+                ("sekreter", "  Sekreterlik İşlemleri", lambda: SekreterPaneli(self.db)),
             ]
         elif self.db.aktif_rol == "rol_yonetici":
             sekme_listesi = [
-                ("🛡️   Parametre & Denetim Logu (Ctrl+1)", lambda: YoneticiPaneli(self.db, self.sekme_sec)),
-                ("🏛️   Öğrenci / Hoca / Ders Ekle (Ctrl+2)", lambda: YoneticiKayitEklemePaneli(self.db)),
-                ("✦   AI Merkezi (Ctrl+3)", lambda: AIMerkeziEkrani(self.db)),
+                ("kalkan", "  Parametre & Denetim Logu (Ctrl+1)", lambda: YoneticiPaneli(self.db, self.sekme_sec)),
+                ("ekle", "  Öğrenci / Hoca / Ders Ekle (Ctrl+2)", lambda: YoneticiKayitEklemePaneli(self.db)),
+                ("ai_merkezi", "  ✦ AI Merkezi (Ctrl+3)", lambda: AIMerkeziEkrani(self.db)),
             ]
         else:
             sekme_listesi = []
 
         self._sekme_fabrikalari = []
-        for idx, (etiket, fabrika) in enumerate(sekme_listesi):
+        for idx, (ikon_ad, etiket, fabrika) in enumerate(sekme_listesi):
             btn = QPushButton(etiket)
+            btn.setProperty("_ikon_ad", ikon_ad)
+            btn.setIconSize(QSize(18, 18))
             btn.clicked.connect(lambda _, i=idx: self.sekme_sec(i))
             self.menu_lay.addWidget(btn)
             self.menu_butonlari.append(btn)
@@ -688,6 +703,14 @@ class AnaPencere(QMainWindow):
         if hasattr(self, "ai_katmani"):
             self.ai_katmani.rol_degisti()
 
+    def _menu_ikonlarini_yenile(self):
+        p = aktif_palet()
+        for b in self.menu_butonlari:
+            ikon_ad = b.property("_ikon_ad") or "ana_sayfa"
+            secili = b.property("secili") == "true"
+            renk = p["vurgu"] if secili else p["menu_metin"]
+            b.setIcon(svg_ikon(ikon_ad, renk, 18))
+
     def sekme_sec(self, idx: int):
         if idx < 0 or idx >= len(self.menu_butonlari):
             return
@@ -695,6 +718,7 @@ class AnaPencere(QMainWindow):
             b.setProperty("secili", "true" if i == idx else "false")
             b.style().unpolish(b)
             b.style().polish(b)
+        self._menu_ikonlarini_yenile()
         w = self.icerik.widget(idx)
         if w.property("_yer_tutucu"):
             gercek_w = self._sekme_fabrikalari[idx]()
