@@ -75,6 +75,8 @@ __all__ = [
     "ders_basari_tahmini_hesapla",
     "ders_seviye_ve_zorluk",
     "uc_plan_karti_olustur",
+    "AIMerkeziEkrani",
+    "RiskDagilimHistogrami",
 ]
 
 _KIMLIK_SEMBOLLERI = {
@@ -99,6 +101,11 @@ _RADAR_SEMBOLLERI = {
     "RiskRadariKarti",
 }
 
+_MERKEZ_SEMBOLLERI = {
+    "AIMerkeziEkrani",
+    "RiskDagilimHistogrami",
+}
+
 
 def __getattr__(ad: str):
     if ad in _KIMLIK_SEMBOLLERI:
@@ -113,4 +120,8 @@ def __getattr__(ad: str):
         from app.ai import risk_radar
 
         return getattr(risk_radar, ad)
+    if ad in _MERKEZ_SEMBOLLERI:
+        from app.ai import merkez_ekran
+
+        return getattr(merkez_ekran, ad)
     raise AttributeError(f"module 'app.ai' has no attribute {ad!r}")

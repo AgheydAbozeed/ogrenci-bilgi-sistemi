@@ -12,7 +12,6 @@ from app.db import Veritabani
 from app.stil import (
     OLCULER, stil_uret, aktif_tema_adi, tema_kaydet
 )
-from app.ekranlar.db_rontgen_ve_acid import SqlRontgenDialog
 from app.ekranlar.ogrenci_ana import OgrenciAnaSayfa, OgrenciDersSecimi
 from app.ekranlar.ogrenci_diger import (
     OgrenciKisiselVeTakvim, OgrenciNotlarTranskript, OgrenciMezuniyetSimulasyon
@@ -22,6 +21,7 @@ from app.ekranlar.hoca_ve_yonetim import (
     OgretimUyesiPaneli, SekreterPaneli, YoneticiPaneli, YoneticiKayitEklemePaneli
 )
 from app.ai.sohbet import AIAsistanKatmani
+from app.ai.merkez_ekran import AIMerkeziEkrani
 
 ROL_ADLARI = {
     "rol_ogrenci": "Öğrenci",
@@ -508,11 +508,6 @@ class AnaPencere(QMainWindow):
         btn_demo.clicked.connect(self.demo_rehberi_ac_kapat)
         u_lay.addWidget(btn_demo)
 
-        btn_sql = QPushButton("🔍  SQL & EXPLAIN Röntgeni")
-        btn_sql.setObjectName("UstBarBtn")
-        btn_sql.clicked.connect(lambda: SqlRontgenDialog(self.db, self).exec())
-        u_lay.addWidget(btn_sql)
-
         self.btn_ust_ai = QPushButton("✦  AI Asistan")
         self.btn_ust_ai.setObjectName("AIDugme")
         self.btn_ust_ai.clicked.connect(lambda: self.ai_katmani.ac_kapat())
@@ -657,6 +652,7 @@ class AnaPencere(QMainWindow):
             sekme_listesi = [
                 ("☑️   Onay Kuyruğu (Ctrl+1)", lambda: DanismanOnayKuyrugu(self.db)),
                 ("📊   Danışanlarım (Ctrl+2)", lambda: DanisanPaneli(self.db)),
+                ("✦   AI Merkezi (Ctrl+3)", lambda: AIMerkeziEkrani(self.db)),
             ]
         elif self.db.aktif_rol == "rol_ogretim_uyesi":
             sekme_listesi = [
@@ -670,6 +666,7 @@ class AnaPencere(QMainWindow):
             sekme_listesi = [
                 ("🛡️   Parametre & Denetim Logu (Ctrl+1)", lambda: YoneticiPaneli(self.db, self.sekme_sec)),
                 ("🏛️   Öğrenci / Hoca / Ders Ekle (Ctrl+2)", lambda: YoneticiKayitEklemePaneli(self.db)),
+                ("✦   AI Merkezi (Ctrl+3)", lambda: AIMerkeziEkrani(self.db)),
             ]
         else:
             sekme_listesi = []
